@@ -1,47 +1,75 @@
-# FE-RTTS-BP 🚀
-### Frontend React TypeScript Tailwind v4 Starter Boilerplate
+# Utility Tools 🛠️
 
-A modern, clean, and modular boilerplate for web frontend development built with **React 19**, **Vite 8**, **TypeScript**, **Tailwind CSS v4**, and **React Router v7**. This project includes a dark mode system, modular layout structure, and a built-in **CLI Generator** to automatically scaffold pages, routes, and sidebar navigation in seconds.
+A modern, fast, and privacy-first all-in-one web utility application built with **React 19**, **Vite 8**, **TypeScript**, and **Tailwind CSS v4**. All processing is executed **100% client-side** in your browser without uploading your files to any external backend server.
 
 ---
 
-## 🛠️ Tech Stack & Key Features
+## ✨ Features & Tools
 
-- ⚡ **Vite 8** - Ultra-fast build tool with instant Hot Module Replacement (HMR).
-- ⚛️ **React 19** - The latest stable release of React.
-- 📘 **TypeScript** - Full static typing and type safety.
-- 🎨 **Tailwind CSS v4** - Next-generation utility-first styling with `@tailwindcss/vite` and CSS variables.
-- 🌓 **Light & Dark Mode** - Clean white light theme by default with smooth dark mode toggle & `localStorage` persistence.
-- 🛣️ **React Router v7** - Centralized client-side routing with nested layout support.
-- 🛠️ **CLI Page Generator** - Automated command (`make:page`) to generate page components, routes, and sidemenu entries instantly.
-- 🗂️ **Modular Architecture** - Separated Layout, Header, Sidebar, Context, Constants, Services, and Hooks.
+### 1. 💬 Fake WhatsApp Chat Generator
+- **Realistic UI**: Simulation of WhatsApp chat interface with status bar, header, avatar, and background.
+- **Dynamic Messaging**: Create sender & receiver messages with custom timestamps, read receipts (blue ticks, double ticks, clock), and media attachments.
+- **Export to Image**: Export screenshot of the chat preview directly to high-quality **PNG** using `html-to-image`.
+- **JSON Backup & Presets**: Export and import complete chat configurations via JSON for easy sharing and restoring.
+
+### 2. 🖼️ Image Converter & Optimizer
+- **Multi-Format Support**: Convert between `PNG`, `JPG / JPEG`, `WEBP`, `AVIF`, `BMP`, `ICO`, and more.
+- **Quality & Size Control**: Adjust compression quality and resize dimensions on the fly.
+- **Batch Processing**: Convert multiple images simultaneously and download them individually or bundled in a **ZIP** archive (`jszip`).
+
+### 3. 📄 Photo to PDF Converter
+- **Multi-Image Merging**: Combine multiple photos into a single PDF document using `pdf-lib`.
+- **Custom Layouts**: Customize page orientation (Portrait / Landscape), margins, and page sizes (A4, Letter, etc.).
+- **Page Reordering**: Easily reorder images before generating the final PDF.
+
+### 4. ✂️ Split PDF
+- **Flexible Splitting**: Extract specific pages or page ranges from any PDF document.
+- **Instant Browser Processing**: Fast parsing and extraction without server delays.
+- **ZIP Download**: Save separated pages individually or bundled into a single ZIP file.
+
+### 5. 🌓 Dark & Light Mode
+- Seamless theme switching with high-contrast dark theme and clean light theme powered by Tailwind CSS v4 variables and `localStorage` persistence.
+
+---
+
+## 🛠️ Tech Stack
+
+- ⚡ **Core**: [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite 8](https://vitejs.dev/)
+- 🎨 **Styling**: [Tailwind CSS v4](https://tailwindcss.com/) with `@tailwindcss/vite`
+- 🛣️ **Routing**: [React Router v7](https://reactrouter.com/)
+- 🗂️ **Libraries**:
+  - `pdf-lib` - Client-side PDF manipulation & generation
+  - `html-to-image` - DOM-to-canvas rendering for chat snapshots
+  - `jszip` - In-browser ZIP archive compression
+  - `lucide-react` - Modern iconography
 
 ---
 
 ## 📁 Folder Structure
 
 ```text
-FE-RTTS-BP/
+Utility-Tools/
+├── public/              # Static assets & favicon
 ├── scripts/
 │   └── make-page.js     # CLI generator for creating pages & routes automatically
 ├── src/
-│   ├── assets/          # Static assets like images, logos, and icons
-│   ├── components/      # Reusable components
-│   │   └── ui/          # Core UI components (Header, Sidebar, Layout)
-│   ├── constants/       # Global constants, router configurations, and menus
-│   │   ├── listed.ts        # Route path definitions (AppRoutes)
-│   │   ├── router.tsx       # React Router route definitions
-│   │   └── sidemenuItems.tsx# Sidebar navigation items and Lucide icons
-│   ├── context/         # React Context for global state (Theme & User)
-│   ├── hooks/           # Reusable custom React hooks (e.g. useFetch)
-│   ├── pages/           # Application pages (Dashboard, Settings, Analytics, etc.)
-│   ├── services/        # API client and HTTP services
-│   ├── types/           # TypeScript interfaces and type definitions
-│   ├── utils/           # Helper utility functions (formatting, dates, etc.)
-│   ├── App.css          # App-wide global stylesheet
-│   ├── App.tsx          # Router Provider Entry Point
-│   ├── index.css        # Tailwind v4 theme variables (light & dark)
-│   └── main.tsx         # Application root mount point
+│   ├── assets/          # Static images and icons
+│   ├── components/      # UI & Feature Components
+│   │   ├── fakeChat/    # Fake WhatsApp Chat components (Header, Preview, JSON Modal, etc.)
+│   │   └── ui/          # Core UI layout components (Header, Sidebar, Layout)
+│   ├── constants/       # Global constants, router definitions, and menu items
+│   │   ├── listed.ts        # App route paths definition
+│   │   ├── router.tsx       # React Router setup
+│   │   └── sidemenuItems.tsx# Sidebar navigation items
+│   ├── context/         # Global AppContext (Theme management)
+│   ├── hooks/           # Reusable custom React hooks
+│   ├── pages/           # Application views (Dashboard, FakeChat, ImageConverter, PhotoToPDF, SplitPDF)
+│   ├── types/           # TypeScript interfaces and types
+│   ├── utils/           # Helper utilities (image conversion, pdf processing, json helpers)
+│   ├── App.tsx          # Root Router Provider
+│   ├── index.css        # Tailwind v4 theme & custom utilities
+│   └── main.tsx         # Application entry point
+├── vercel.json          # Vercel SPA rewrite configuration
 ├── package.json
 └── vite.config.ts
 ```
@@ -51,14 +79,15 @@ FE-RTTS-BP/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **Node.js** (version 18 or above recommended)
-- Package manager: **pnpm** (recommended), **npm**, or **yarn**.
+- **Node.js** (version 18+ recommended)
+- **pnpm** (recommended) or **npm** / **yarn**
 
-### Installation Steps
+### Installation
 
-1. **Clone or navigate into the repository**:
+1. **Clone the repository**:
    ```bash
-   cd FE-RTTS-BP
+   git clone https://github.com/Biyu-aja/Utility-Tools.git
+   cd Utility-Tools
    ```
 
 2. **Install dependencies**:
@@ -68,90 +97,59 @@ FE-RTTS-BP/
    npm install
    ```
 
-3. **Run the Development Server**:
+3. **Start the development server**:
    ```bash
    pnpm dev
    # or
    npm run dev
    ```
-   Open your browser at [http://localhost:5173](http://localhost:5173).
+   Open your browser at `http://localhost:5173`.
+
+4. **Build for production**:
+   ```bash
+   pnpm build
+   # or
+   npm run build
+   ```
 
 ---
 
-## 💻 Available Scripts
+## 🌐 Deployment (Vercel)
 
-| Script | Description |
-| :--- | :--- |
-| `pnpm dev` / `npm run dev` | Starts the Vite local development server. |
-| `pnpm make:page` / `npm run make:page` | **CLI Generator**: Automatically scaffolds a new page, route, and sidebar menu item. |
-| `pnpm build` / `npm run build` | Compiles TypeScript and builds production bundle in `dist/`. |
-| `pnpm preview` / `npm run preview` | Previews the production build locally. |
-| `pnpm lint` / `npm run lint` | Runs ESLint code checks. |
+This project includes a `vercel.json` configuration file with rewrite rules to ensure Single Page Application (SPA) routing works properly upon browser refresh:
+
+```json
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+```
+
+To deploy:
+1. Push your repository to GitHub / GitLab / Bitbucket.
+2. Import the repository into [Vercel](https://vercel.com).
+3. The build command (`vite build`) and output directory (`dist`) will be automatically detected.
 
 ---
 
 ## ⚡ CLI Page Generator
 
-You can generate a new page, register its route, and add it to the sidebar navigation with a single command!
+You can quickly scaffold a new utility page, route, and sidebar menu item using the built-in generator:
 
-### 1. Direct Command (Default icon: `LayoutDashboard`)
 ```bash
-pnpm make:page Settings
-# or
-npm run make:page Settings
-```
+# Basic generator
+pnpm make:page MyTool
 
-### 2. With Custom Lucide Icon
-```bash
-pnpm make:page Analytics -- --icon BarChart3
-# or
-npm run make:page Analytics -- --icon BarChart3
-# or
-node scripts/make-page.js Analytics --icon BarChart3
-```
-
-### 3. Interactive Mode
-Run the command without arguments to enter interactive prompt:
-```bash
-pnpm make:page
-```
-
-**What the CLI does automatically:**
-1. Creates `src/pages/<PageName>.tsx` with a clean boilerplate component.
-2. Registers the route in `src/constants/listed.ts` (`AppRoutes`).
-3. Adds the route and import in `src/constants/router.tsx`.
-4. Adds the navigation item and imports the Lucide icon in `src/constants/sidemenuItems.tsx`.
-
----
-
-## 🎨 Theme & Dark Mode
-
-The project comes with a built-in theme manager in `src/context/AppContext.tsx`:
-- **Default Theme**: Light mode (clean `#ffffff` background).
-- **Dark Mode**: High-contrast dark palette configured in `src/index.css`.
-- **Toggle Button**: Located on the top-left side of the header.
-- **Persistence**: Automatically remembers user preference in `localStorage`.
-
-To use the theme in your own components:
-```tsx
-import { useApp } from '../context/AppContext'
-
-export function MyComponent() {
-  const { theme, toggleTheme } = useApp()
-
-  return (
-    <button onClick={toggleTheme}>
-      Current theme: {theme}
-    </button>
-  )
-}
+# With custom Lucide icon
+pnpm make:page MyTool -- --icon Wrench
 ```
 
 ---
 
-## 🧱 Layout Components
+## 📄 License
 
-The layout is divided into dedicated, clean components inside `src/components/ui/`:
-- **`header.tsx`**: Top navigation containing the dark mode toggle, app title, and user indicator.
-- **`sidebar.tsx`**: Side navigation menu rendering items from `src/constants/sidemenuItems.tsx`.
-- **`layout.tsx`**: Main application shell wrapping the header, sidebar, and `<Outlet />`.
+This project is open-source and available under the [MIT License](LICENSE).
