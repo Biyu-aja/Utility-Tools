@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+
+  /* Theme Brand Colors */
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+
+  /* Theme Layout Colors */
+  --color-bg-background: var(--bg-background);
+  --color-bg-card: var(--bg-card);
+  --color-bg-hover: var(--bg-hover);
+
+  --color-border-main: var(--border-main);
+  --color-border-subtle: var(--border-subtle);
+
+  --color-text-main: var(--text-main);
+  --color-text-muted: var(--text-muted);
+}
+
+:root {
+  /* Brand colors */
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --secondary: #10b981;
+
+  /* Layout colors (Clean White Light Theme by default) */
+  --bg-background: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: #f8fafc;
+
+  --border-main: #e2e8f0;
+  --border-subtle: #f1f5f9;
+
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+}
+
+.dark {
+  /* Dark Theme */
+  --primary: #3b82f6;
+  --primary-hover: #60a5fa;
+  --secondary: #10b981;
+
+  --bg-background: #090d16;
+  --bg-card: #0f172a;
+  --bg-hover: #1e293b;
+
+  --border-main: #1e293b;
+  --border-subtle: #334155;
+
+  --text-main: #f8fafc;
+  /* Main text (slate-50) */
+  --text-muted: #94a3b8;
+  /* Muted text (slate-400) */
+}
