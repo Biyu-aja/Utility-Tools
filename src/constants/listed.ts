@@ -11,6 +11,7 @@ export const AppRoutes = {
   SplitPDF: "split-pdf",
   ImageConverter: "image-converter",
   FakeChat: "fake-chat",
+  MockupGenerator: "mockup-generator",
 }
 
 export const ECommerceListed = AppRoutes

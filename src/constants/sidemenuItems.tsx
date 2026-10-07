@@ -4,7 +4,7 @@
  * This file: sidemenuItems.tsx (Defines the side menu navigation items and Lucide icons used).
  */
 
-import { LayoutDashboard, Settings as SettingsIcon, FileImage, Scissors, Sparkles, MessageSquare } from 'lucide-react'
+import { LayoutDashboard, Settings as SettingsIcon, FileImage, Scissors, Sparkles, MessageSquare, Smartphone } from 'lucide-react'
 import { AppRoutes } from './listed'
 
 export const sidemenuItems = [
@@ -12,6 +12,11 @@ export const sidemenuItems = [
     name: 'Dashboard',
     href: AppRoutes.Dashboard,
     icons: <LayoutDashboard className="w-4.5 h-4.5" />,
+  },
+  {
+    name: '3D Mockup Studio',
+    href: AppRoutes.MockupGenerator,
+    icons: <Smartphone className="w-4.5 h-4.5" />,
   },
   {
     name: 'Fake WA Chat',

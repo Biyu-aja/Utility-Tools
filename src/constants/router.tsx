@@ -12,6 +12,7 @@ import { ImageConverterPage } from '../pages/ImageConverter'
 import { PhotoToPDFPage } from '../pages/PhotoToPDF'
 import { SplitPDFPage } from '../pages/SplitPDF'
 import { FakeChatPage } from '../pages/FakeChat'
+import { MockupGeneratorPage } from '../pages/MockupGenerator'
 import { SettingsPage } from '../pages/Settings'
 
 export const router = createBrowserRouter([
@@ -26,6 +27,10 @@ export const router = createBrowserRouter([
       {
         path: AppRoutes.Dashboard,
         element: <DashboardPage />,
+      },
+      {
+        path: AppRoutes.MockupGenerator,
+        element: <MockupGeneratorPage />,
       },
       {
         path: AppRoutes.FakeChat,

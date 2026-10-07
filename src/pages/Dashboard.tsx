@@ -5,7 +5,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import { FileImage, Scissors, ArrowRight, ShieldCheck, Zap, Sparkles, MessageSquare } from 'lucide-react'
+import { FileImage, Scissors, ArrowRight, ShieldCheck, Zap, Sparkles, MessageSquare, Smartphone } from 'lucide-react'
 import { AppRoutes } from '../constants/listed'
 
 export function DashboardPage() {
@@ -22,7 +22,7 @@ export function DashboardPage() {
             Selamat Datang di Converter Studio
           </h1>
           <p className="text-sm sm:text-base text-text-muted leading-relaxed">
-            Alat konversi dokumen, file media, dan generator kreatif berkecepatan tinggi yang berjalan 100% langsung
+            Alat konversi dokumen, file media, generator kreatif, dan 3D mockup studio berkecepatan tinggi yang berjalan 100% langsung
             di browser Anda. Privasi aman, tanpa kuota upload server.
           </p>
         </div>
@@ -32,10 +32,43 @@ export function DashboardPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-text-main">Alat Konversi & Generator Tersedia</h2>
-          <span className="text-xs text-text-muted">4 Tools Aktif</span>
+          <span className="text-xs text-text-muted">5 Tools Aktif</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {/* 3D Mockup Studio Card */}
+          <Link
+            to={`/${AppRoutes.MockupGenerator}`}
+            className="group relative bg-bg-card hover:bg-bg-hover/80 border border-border-main hover:border-primary/50 rounded-3xl p-6 transition-all duration-200 shadow-xs hover:shadow-md flex flex-col justify-between space-y-6"
+          >
+            <div className="space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Smartphone className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="inline-block text-[11px] font-bold text-primary tracking-wider uppercase mb-1">
+                  3D Perspectives & Multi-Device
+                </div>
+                <h3 className="text-lg font-bold text-text-main group-hover:text-primary transition-colors">
+                  3D Device Mockup Studio
+                </h3>
+                <p className="text-xs sm:text-sm text-text-muted mt-1 leading-relaxed">
+                  Pasang screenshot ke frame Phone (iPhone & Android), Laptop (MacBook), PC Monitor, iPad, Browser, & Watch. Ubah arah facing 3D, flip horizontal/vertikal, dan unduh resolusi 4K / transparan.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-border-main/60 flex items-center justify-between text-xs font-semibold text-primary">
+              <span className="flex items-center space-x-1.5 text-text-muted font-normal">
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                <span>3D Angles & 4K Export</span>
+              </span>
+              <span className="flex items-center space-x-1 group-hover:translate-x-1 transition-transform">
+                <span>Buka Tool</span>
+                <ArrowRight className="w-4 h-4" />
+              </span>
+            </div>
+          </Link>
           {/* Fake WhatsApp Chat Card */}
           <Link
             to={`/${AppRoutes.FakeChat}`}
