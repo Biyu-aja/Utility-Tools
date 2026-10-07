@@ -16,13 +16,13 @@ export function DashboardPage() {
         <div className="max-w-2xl space-y-3">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Document & Media Converter Tools</span>
+            <span>All-in-One Digital Utility Tools</span>
           </div>
           <h1 className="text-2xl sm:text-4xl font-extrabold text-text-main tracking-tight">
-            Selamat Datang di Converter Studio
+            Selamat Datang di Utility Tools Studio
           </h1>
           <p className="text-sm sm:text-base text-text-muted leading-relaxed">
-            Alat konversi dokumen, file media, generator kreatif, dan 3D mockup studio berkecepatan tinggi yang berjalan 100% langsung
+            Kumpulan alat utilitas digital, konversi dokumen & media, generator kreatif, serta 3D mockup studio berkecepatan tinggi yang berjalan 100% langsung
             di browser Anda. Privasi aman, tanpa kuota upload server.
           </p>
         </div>
@@ -31,7 +31,7 @@ export function DashboardPage() {
       {/* Available Tools Section */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-text-main">Alat Konversi & Generator Tersedia</h2>
+          <h2 className="text-lg font-bold text-text-main">Daftar Utility & Generator Tools</h2>
           <span className="text-xs text-text-muted">5 Tools Aktif</span>
         </div>
 

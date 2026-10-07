@@ -14,9 +14,9 @@ export function Header() {
     <header className="border-b border-border-main bg-bg-card/80 backdrop-blur-md sticky top-0 z-40 h-16 flex items-center justify-between px-6">
       <div className="flex items-center space-x-3">
         <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-white font-black text-sm shadow-xs">
-          C
+          U
         </div>
-        <span className="text-base font-bold text-text-main tracking-tight">Converter Studio</span>
+        <span className="text-base font-bold text-text-main tracking-tight">Utility Tools Studio</span>
       </div>
 
       <div className="flex items-center space-x-4">

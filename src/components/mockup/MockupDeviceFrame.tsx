@@ -441,14 +441,16 @@ export const MockupDeviceFrame: React.FC<Props> = ({ state }) => {
   }
 
   // =========================================================================
-  // 3. MACBOOK PRO 16" (Full 3D Clamshell with Adjustable Hinge Open Angle)
+  // 3. MACBOOK PRO 16" (100% Solid Seamless 3D Unibody Clamshell)
   // =========================================================================
   if (device === 'macbook-pro') {
     const screenWidth = 700
     const screenHeight = 440
     const lidThickness = Math.max(8, Math.round(thickness * 0.55))
-    const deckDepth = 260
+    const deckDepth = 340
     const deckThickness = Math.max(14, thickness)
+    const deckRadius = 16
+    const lidRadius = 18
     const openAngle = appearance.laptopLidAngle || 105
     // Angle to rotate keyboard deck forward relative to the screen lid (around hinge)
     const deckRotateX = 180 - openAngle
@@ -463,10 +465,10 @@ export const MockupDeviceFrame: React.FC<Props> = ({ state }) => {
           <div
             className="absolute left-1/2 -translate-x-1/2 rounded-full pointer-events-none transition-all duration-200"
             style={{
-              width: `${screenWidth * 1.05}px`,
-              height: `${50 + shadowDistance * 0.8}px`,
-              bottom: `-${40 + shadowDistance * 0.5}px`,
-              background: `radial-gradient(ellipse at center, rgba(0, 0, 0, ${shadowOpacity * 1.4}) 0%, transparent 75%)`,
+              width: `${screenWidth * 1.08}px`,
+              height: `${60 + shadowDistance * 0.8}px`,
+              bottom: `-${50 + shadowDistance * 0.5}px`,
+              background: `radial-gradient(ellipse at center, rgba(0, 0, 0, ${shadowOpacity * 1.5}) 0%, rgba(0, 0, 0, ${shadowOpacity * 0.4}) 50%, transparent 80%)`,
               filter: `blur(${shadowBlur * 0.7}px)`,
               transform: `translateZ(-${deckThickness + 30}px) translateY(${shadowDistance}px)`,
             }}
@@ -475,45 +477,47 @@ export const MockupDeviceFrame: React.FC<Props> = ({ state }) => {
 
         {/* 1. DISPLAY LID (SCREEN) */}
         <div
-          className="relative flex flex-col items-center"
-          style={{ transformStyle: 'preserve-3d' }}
+          className="relative flex flex-col items-center z-10"
+          style={{
+            width: `${screenWidth}px`,
+            height: `${screenHeight}px`,
+            transformStyle: 'preserve-3d',
+          }}
         >
-          {/* Lid Back Shell */}
+          {/* Back Lid Shell (at Z = -lidThickness) */}
           <div
-            className="absolute inset-0 pointer-events-none"
+            className="absolute inset-0 pointer-events-none rounded-[18px]"
             style={{
-              width: `${screenWidth}px`,
-              height: `${screenHeight}px`,
-              borderRadius: '20px 20px 4px 4px',
-              backgroundColor: appearance.color,
               transform: `translateZ(-${lidThickness}px)`,
-              filter: 'brightness(0.8)',
-              boxShadow: 'inset 0 0 20px rgba(0,0,0,0.85)',
+              backgroundColor: appearance.color,
+              filter: 'brightness(0.75)',
+              boxShadow: 'inset 0 0 24px rgba(0,0,0,0.8), 0 10px 30px rgba(0,0,0,0.5)',
+              backgroundImage: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(0,0,0,0.4) 100%)',
             }}
           />
 
-          {/* Lid Slices */}
-          {renderDepthSlices(screenWidth, screenHeight, 20, 6)}
+          {/* Smooth Dense Depth Slices for Display Lid */}
+          {renderDepthSlices(screenWidth, screenHeight, lidRadius, 16)}
 
-          {/* Front Display Lid Face */}
+          {/* Front Display Lid Face (Z = 0) */}
           <div
-            className="relative overflow-hidden flex flex-col p-[9px] z-10"
+            className="absolute inset-0 overflow-hidden flex flex-col p-[9px] rounded-[18px] z-20"
             style={{
-              width: `${screenWidth}px`,
-              height: `${screenHeight}px`,
-              borderRadius: '20px 20px 4px 4px',
-              backgroundColor: appearance.color,
               transform: 'translateZ(0px)',
+              backgroundColor: appearance.color,
               boxShadow: `
-                0 0 0 1px rgba(255, 255, 255, 0.35),
-                inset 0 1px 2px rgba(255,255,255,0.4)
+                0 0 0 1px rgba(255, 255, 255, 0.4),
+                inset 0 1.5px 2px rgba(255,255,255,0.6),
+                inset 0 -1px 2px rgba(0,0,0,0.5)
               `,
             }}
           >
-            {/* Inner Display Bezel */}
+            {/* Display Bezel */}
             <div
-              className="w-full h-full relative overflow-hidden bg-black flex flex-col"
-              style={{ borderRadius: '14px 14px 2px 2px' }}
+              className="w-full h-full relative overflow-hidden bg-black flex flex-col rounded-[12px]"
+              style={{
+                boxShadow: 'inset 0 0 0 1px #000, inset 0 0 6px rgba(0,0,0,0.9)',
+              }}
             >
               <div
                 className="w-full h-full relative overflow-hidden flex flex-col"
@@ -523,20 +527,26 @@ export const MockupDeviceFrame: React.FC<Props> = ({ state }) => {
 
                 {/* MacBook Camera Notch */}
                 {screen.showNotch && (
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 z-30 w-36 h-5 rounded-b-xl bg-black flex items-center justify-center space-x-2 px-3 shadow-md">
-                    <div className="w-2 h-2 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center">
-                      <div className="w-0.5 h-0.5 rounded-full bg-emerald-500" />
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 z-30 w-36 h-5 rounded-b-xl bg-black flex items-center justify-center space-x-2 px-3 shadow-md border-b border-white/5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-zinc-950 border border-zinc-700 flex items-center justify-center">
+                      <div className="w-1 h-1 rounded-full bg-blue-900/90 flex items-center justify-center">
+                        <div className="w-0.5 h-0.5 rounded-full bg-cyan-400" />
+                      </div>
                     </div>
+                    {/* TrueTone sensor */}
+                    <div className="w-1.5 h-1.5 rounded-full bg-zinc-900" />
+                    {/* Green Camera Indicator LED */}
+                    <div className="w-1 h-1 rounded-full bg-emerald-500 shadow-xs shadow-emerald-400" />
                   </div>
                 )}
 
-                {/* Glare */}
+                {/* Glass Glare */}
                 {screen.showGlare && (
                   <div
                     className="absolute inset-0 pointer-events-none z-20"
                     style={{
                       background:
-                        'linear-gradient(135deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.06) 40%, transparent 60%)',
+                        'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.06) 40%, transparent 60%)',
                       opacity: screen.glareOpacity / 100,
                       mixBlendMode: 'screen',
                     }}
@@ -547,173 +557,210 @@ export const MockupDeviceFrame: React.FC<Props> = ({ state }) => {
           </div>
         </div>
 
-        {/* 2. METALLIC HINGE CONNECTOR */}
+        {/* 2. SOLID SEAMLESS HINGE BAR */}
         <div
-          className="h-3 rounded-t-xs -mt-[1px] z-20 flex items-center justify-center shadow-inner"
+          className="relative z-20 flex items-center justify-center -mt-[4px] pointer-events-none"
           style={{
-            width: `${screenWidth * 0.96}px`,
-            backgroundColor: '#0a0d14',
-            borderTop: '1px solid rgba(255,255,255,0.2)',
-            borderBottom: '1px solid rgba(0,0,0,0.8)',
+            width: `${screenWidth}px`,
+            height: '14px',
+            transformStyle: 'preserve-3d',
+            transform: 'translateZ(-4px)',
           }}
-        />
+        >
+          <div
+            className="h-3.5 rounded-full shadow-2xl"
+            style={{
+              width: `${screenWidth - 20}px`,
+              background: 'linear-gradient(180deg, #2b2d35 0%, #121418 35%, #050608 70%, #1e2026 100%)',
+              boxShadow: '0 3px 8px rgba(0,0,0,0.95), inset 0 1px 1px rgba(255,255,255,0.3)',
+              border: '1px solid rgba(0,0,0,0.9)',
+            }}
+          />
+        </div>
 
-        {/* 3. FOLDING KEYBOARD BASE DECK (Exact 1:1 width matching screen lid) */}
+        {/* 3. SOLID ENCLOSED KEYBOARD BASE DECK */}
         <div
-          className="relative z-30 flex flex-col items-center justify-between p-2.5 transition-all duration-150"
+          className="relative z-30 transition-all duration-150 -mt-[10px]"
           style={{
             width: `${screenWidth}px`,
             height: `${deckDepth}px`,
-            transformOrigin: 'center top',
-            transform: `rotateX(${deckRotateX}deg) translateZ(0px)`,
+            transformOrigin: 'top center',
+            transform: `rotateX(${deckRotateX}deg)`,
             transformStyle: 'preserve-3d',
-            borderRadius: '2px 2px 18px 18px',
-            backgroundColor: appearance.color,
-            boxShadow: `
-              0 15px 35px rgba(0, 0, 0, 0.7),
-              inset 0 1.5px 2px rgba(255, 255, 255, 0.5),
-              inset 0 -4px 8px rgba(0, 0, 0, 0.6),
-              0 0 0 1px rgba(255,255,255,0.2)
-            `,
-            backgroundImage: `linear-gradient(180deg, 
-              rgba(255,255,255,0.25) 0%, 
-              rgba(255,255,255,0.05) 15%, 
-              rgba(0,0,0,0.2) 60%, 
-              rgba(0,0,0,0.5) 100%)`,
           }}
         >
-          {/* Deck Depth Extrusion Bottom Rim */}
+          {/* A. SOLID BOTTOM BASE PLATE (Z = -deckThickness) */}
           <div
-            className="absolute inset-0 pointer-events-none"
+            className="absolute inset-0 pointer-events-none rounded-[16px]"
             style={{
-              borderRadius: '2px 2px 18px 18px',
               transform: `translateZ(-${deckThickness}px)`,
               backgroundColor: appearance.color,
-              filter: 'brightness(0.7)',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.8)',
+              filter: 'brightness(0.68)',
+              backgroundImage: `linear-gradient(180deg, 
+                rgba(0,0,0,0.5) 0%, 
+                rgba(255,255,255,0.06) 50%, 
+                rgba(0,0,0,0.6) 100%)`,
+              boxShadow: `
+                0 25px 50px rgba(0,0,0,0.95),
+                inset 0 0 35px rgba(0,0,0,0.85)
+              `,
             }}
-          />
+          >
+            {/* 4 Clean Black Rubber Feet Pads */}
+            <div className="absolute top-4 left-7 w-5 h-5 rounded-full bg-zinc-950 border border-zinc-800 shadow-md flex items-center justify-center">
+              <div className="w-2.5 h-2.5 rounded-full bg-zinc-900 border border-zinc-800" />
+            </div>
+            <div className="absolute top-4 right-7 w-5 h-5 rounded-full bg-zinc-950 border border-zinc-800 shadow-md flex items-center justify-center">
+              <div className="w-2.5 h-2.5 rounded-full bg-zinc-900 border border-zinc-800" />
+            </div>
+            <div className="absolute bottom-5 left-7 w-5 h-5 rounded-full bg-zinc-950 border border-zinc-800 shadow-md flex items-center justify-center">
+              <div className="w-2.5 h-2.5 rounded-full bg-zinc-900 border border-zinc-800" />
+            </div>
+            <div className="absolute bottom-5 right-7 w-5 h-5 rounded-full bg-zinc-950 border border-zinc-800 shadow-md flex items-center justify-center">
+              <div className="w-2.5 h-2.5 rounded-full bg-zinc-900 border border-zinc-800" />
+            </div>
+          </div>
 
-          {/* Top Section: Speakers & Keyboard Well */}
-          <div className="w-full flex items-center justify-between gap-2 px-1">
-            {/* Left Speaker Grille */}
-            <div
-              className="w-7 h-28 rounded-md opacity-30 pointer-events-none hidden sm:block"
-              style={{
-                backgroundImage: 'radial-gradient(#000000 35%, transparent 35%)',
-                backgroundSize: '3px 3px',
-              }}
-            />
+          {/* B. ULTRA-DENSE SMOOTH ROUNDED DEPTH SLICES (24 Slices for 100% Solid Extrusion with Zero Gaps) */}
+          {renderDepthSlices(screenWidth, deckDepth, deckRadius, 24)}
 
-            {/* Keyboard Well */}
-            <div
-              className="flex-1 bg-[#090b0e] rounded-lg p-1.5 shadow-inner border border-zinc-900 flex flex-col justify-between gap-1"
-              style={{
-                boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.9), 0 1px 1px rgba(255,255,255,0.1)',
-              }}
-            >
-              {/* Row 1: Function Keys */}
-              <div className="flex gap-1 h-3.5">
-                <div className="w-7 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[5px] text-zinc-400 flex items-center justify-center font-mono">esc</div>
-                {Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="flex-1 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[5px] text-zinc-500 flex items-center justify-center font-mono">
-                    F{i + 1}
+          {/* C. TOP DECK SURFACE (Z = 0) */}
+          <div
+            className="absolute inset-0 z-20 flex flex-col justify-between p-3.5 rounded-[16px] overflow-hidden"
+            style={{
+              transform: 'translateZ(0px)',
+              backgroundColor: appearance.color,
+              backgroundImage: `linear-gradient(180deg, 
+                rgba(255,255,255,0.35) 0%, 
+                rgba(255,255,255,0.08) 15%, 
+                rgba(0,0,0,0.15) 60%, 
+                rgba(0,0,0,0.45) 100%)`,
+              boxShadow: `
+                0 0 0 1px rgba(255, 255, 255, 0.4),
+                inset 0 1.5px 2px rgba(255, 255, 255, 0.6),
+                inset 0 -3px 6px rgba(0, 0, 0, 0.5)
+              `,
+            }}
+          >
+            {/* Top Deck: Speakers + Keyboard Well */}
+            <div className="w-full flex items-center justify-between gap-3 px-1 relative z-20">
+              {/* Left Speaker Grille */}
+              <div
+                className="w-8 h-32 rounded-md opacity-35 pointer-events-none hidden sm:block"
+                style={{
+                  backgroundImage: 'radial-gradient(#000000 35%, transparent 35%)',
+                  backgroundSize: '3px 3px',
+                }}
+              />
+
+              {/* Keyboard Well */}
+              <div
+                className="flex-1 bg-[#090b0e] rounded-xl p-2 shadow-2xl border border-zinc-900 flex flex-col justify-between gap-1.5"
+                style={{
+                  boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.95), 0 1px 2px rgba(255,255,255,0.15)',
+                }}
+              >
+                {/* Row 1: Function Keys */}
+                <div className="flex gap-1 h-4">
+                  <div className="w-8 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[6px] text-zinc-400 flex items-center justify-center font-mono">esc</div>
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <div key={i} className="flex-1 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[6px] text-zinc-500 flex items-center justify-center font-mono">
+                      F{i + 1}
+                    </div>
+                  ))}
+                  {/* Touch ID / Power Key */}
+                  <div className="w-8 bg-[#1c1e24] rounded-xs border border-zinc-800 flex items-center justify-center shadow-xs">
+                    <div className="w-2.5 h-2.5 rounded-full border border-zinc-600 bg-zinc-900" />
                   </div>
-                ))}
-                <div className="w-6 bg-[#1c1e24] rounded-xs border border-zinc-800 flex items-center justify-center">
-                  <div className="w-2 h-2 rounded-full border border-zinc-600 bg-zinc-900" />
+                </div>
+
+                {/* Row 2: Number Row */}
+                <div className="flex gap-1 h-5">
+                  {['`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'delete'].map((k, i) => (
+                    <div
+                      key={i}
+                      className={`bg-[#1c1e24] rounded-xs border border-zinc-800 text-[8px] text-zinc-300 flex items-center justify-center font-medium shadow-xs ${
+                        k === 'delete' ? 'w-11' : 'flex-1'
+                      }`}
+                    >
+                      {k}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Row 3: QWERTY */}
+                <div className="flex gap-1 h-5">
+                  {['tab', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[', ']', '\\'].map((k, i) => (
+                    <div
+                      key={i}
+                      className={`bg-[#1c1e24] rounded-xs border border-zinc-800 text-[8px] text-zinc-300 flex items-center justify-center font-medium shadow-xs ${
+                        k === 'tab' ? 'w-10' : 'flex-1'
+                      }`}
+                    >
+                      {k}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Row 4: ASDF */}
+                <div className="flex gap-1 h-5">
+                  {['caps', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ';', "'", 'return'].map((k, i) => (
+                    <div
+                      key={i}
+                      className={`bg-[#1c1e24] rounded-xs border border-zinc-800 text-[8px] text-zinc-300 flex items-center justify-center font-medium shadow-xs ${
+                        k === 'caps' ? 'w-11' : k === 'return' ? 'w-11' : 'flex-1'
+                      }`}
+                    >
+                      {k}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Row 5: ZXCV */}
+                <div className="flex gap-1 h-5">
+                  {['shift', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', ',', '.', '/', 'shift'].map((k, i) => (
+                    <div
+                      key={i}
+                      className={`bg-[#1c1e24] rounded-xs border border-zinc-800 text-[8px] text-zinc-300 flex items-center justify-center font-medium shadow-xs ${
+                        k === 'shift' ? 'w-12' : 'flex-1'
+                      }`}
+                    >
+                      {k}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Row 6: Spacebar & Modifiers */}
+                <div className="flex gap-1 h-5">
+                  <div className="w-7 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[7px] text-zinc-400 flex items-center justify-center">fn</div>
+                  <div className="w-7 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[7px] text-zinc-400 flex items-center justify-center">ctrl</div>
+                  <div className="w-7 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[7px] text-zinc-400 flex items-center justify-center">opt</div>
+                  <div className="w-9 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[7px] text-zinc-400 flex items-center justify-center">cmd</div>
+                  <div className="flex-1 bg-[#1c1e24] rounded-xs border border-zinc-800 shadow-xs" />
+                  <div className="w-9 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[7px] text-zinc-400 flex items-center justify-center">cmd</div>
+                  <div className="w-7 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[7px] text-zinc-400 flex items-center justify-center">opt</div>
+                  <div className="w-10 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[7px] text-zinc-400 flex items-center justify-center">◀ ▼ ▶</div>
                 </div>
               </div>
 
-              {/* Row 2: Number Row */}
-              <div className="flex gap-1 h-4.5">
-                {['`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'delete'].map((k, i) => (
-                  <div
-                    key={i}
-                    className={`bg-[#1c1e24] rounded-xs border border-zinc-800 text-[7px] text-zinc-300 flex items-center justify-center font-medium shadow-xs ${
-                      k === 'delete' ? 'w-9' : 'flex-1'
-                    }`}
-                  >
-                    {k}
-                  </div>
-                ))}
-              </div>
-
-              {/* Row 3: QWERTY */}
-              <div className="flex gap-1 h-4.5">
-                {['tab', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[', ']', '\\'].map((k, i) => (
-                  <div
-                    key={i}
-                    className={`bg-[#1c1e24] rounded-xs border border-zinc-800 text-[7px] text-zinc-300 flex items-center justify-center font-medium shadow-xs ${
-                      k === 'tab' ? 'w-8' : 'flex-1'
-                    }`}
-                  >
-                    {k}
-                  </div>
-                ))}
-              </div>
-
-              {/* Row 4: ASDF */}
-              <div className="flex gap-1 h-4.5">
-                {['caps', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ';', "'", 'return'].map((k, i) => (
-                  <div
-                    key={i}
-                    className={`bg-[#1c1e24] rounded-xs border border-zinc-800 text-[7px] text-zinc-300 flex items-center justify-center font-medium shadow-xs ${
-                      k === 'caps' ? 'w-9' : k === 'return' ? 'w-9' : 'flex-1'
-                    }`}
-                  >
-                    {k}
-                  </div>
-                ))}
-              </div>
-
-              {/* Row 5: ZXCV */}
-              <div className="flex gap-1 h-4.5">
-                {['shift', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', ',', '.', '/', 'shift'].map((k, i) => (
-                  <div
-                    key={i}
-                    className={`bg-[#1c1e24] rounded-xs border border-zinc-800 text-[7px] text-zinc-300 flex items-center justify-center font-medium shadow-xs ${
-                      k === 'shift' ? 'w-10' : 'flex-1'
-                    }`}
-                  >
-                    {k}
-                  </div>
-                ))}
-              </div>
-
-              {/* Row 6: Bottom Spacebar & Modifier Keys */}
-              <div className="flex gap-1 h-4.5">
-                <div className="w-6 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[6px] text-zinc-400 flex items-center justify-center">fn</div>
-                <div className="w-6 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[6px] text-zinc-400 flex items-center justify-center">ctrl</div>
-                <div className="w-6 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[6px] text-zinc-400 flex items-center justify-center">opt</div>
-                <div className="w-8 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[6px] text-zinc-400 flex items-center justify-center">cmd</div>
-                <div className="flex-1 bg-[#1c1e24] rounded-xs border border-zinc-800 shadow-xs" />
-                <div className="w-8 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[6px] text-zinc-400 flex items-center justify-center">cmd</div>
-                <div className="w-6 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[6px] text-zinc-400 flex items-center justify-center">opt</div>
-                <div className="w-9 bg-[#1c1e24] rounded-xs border border-zinc-800 text-[6px] text-zinc-400 flex items-center justify-center">◀ ▼ ▶</div>
-              </div>
+              {/* Right Speaker Grille */}
+              <div
+                className="w-8 h-32 rounded-md opacity-35 pointer-events-none hidden sm:block"
+                style={{
+                  backgroundImage: 'radial-gradient(#000000 35%, transparent 35%)',
+                  backgroundSize: '3px 3px',
+                }}
+              />
             </div>
 
-            {/* Right Speaker Grille */}
+            {/* Bottom Deck: Force Touch Trackpad */}
             <div
-              className="w-7 h-28 rounded-md opacity-30 pointer-events-none hidden sm:block"
+              className="w-56 h-24 rounded-xl border border-white/20 bg-black/15 my-1.5 mx-auto flex items-center justify-center shadow-xs relative z-20"
               style={{
-                backgroundImage: 'radial-gradient(#000000 35%, transparent 35%)',
-                backgroundSize: '3px 3px',
+                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.5), 0 1px 1px rgba(255,255,255,0.2)',
               }}
             />
           </div>
-
-          {/* Bottom Section: Force Touch Trackpad */}
-          <div
-            className="w-48 h-20 rounded-lg border border-white/20 bg-black/15 my-1 flex items-center justify-center shadow-xs"
-            style={{
-              boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.4), 0 1px 1px rgba(255,255,255,0.15)',
-            }}
-          />
-
-          {/* Front Lip: Thumb Opening Groove */}
-          <div className="w-20 h-1.5 rounded-b-md bg-black/60 border-t border-white/30 mx-auto" />
         </div>
       </div>
     )

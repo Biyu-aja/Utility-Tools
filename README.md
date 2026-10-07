@@ -6,7 +6,13 @@ A modern, fast, and privacy-first all-in-one web utility application built with 
 
 ## ✨ Features & Tools
 
-### 1. 💬 Fake WhatsApp Chat Generator
+### 1. 📱 3D Device Mockup Studio
+- **Multi-Device Hardware**: 3D frames for iPhone 16 Pro, Galaxy/Pixel, MacBook Pro, Studio Display, iPad Pro, Safari Browser, and Apple Watch Ultra.
+- **Custom Screenshot & Clipboard Paste**: Direct upload or `Ctrl+V` screenshot pasting onto the display.
+- **Full 3D Transformation**: 3D Rotation (X, Y, Z), perspective, angle presets, horizontal/vertical flip, and laptop hinge angle adjustment.
+- **Studio Export**: Download high-resolution PNG, JPEG, WebP (up to 4K 3x) or copy straight to clipboard.
+
+### 2. 💬 Fake WhatsApp Chat Generator
 - **Realistic UI**: Simulation of WhatsApp chat interface with status bar, header, avatar, and background.
 - **Dynamic Messaging**: Create sender & receiver messages with custom timestamps, read receipts (blue ticks, double ticks, clock), and media attachments.
 - **Export to Image**: Export screenshot of the chat preview directly to high-quality **PNG** using `html-to-image`.
