@@ -33,6 +33,10 @@ import {
   Pipette,
   Palette,
   Crosshair,
+  Lock,
+  Unlock,
+  SlidersHorizontal,
+  Maximize2,
 } from 'lucide-react'
 import {
   type ImageConvertItem,
@@ -48,7 +52,6 @@ import {
   copyBlobToClipboard,
   createSampleImages,
   createFakePngDemo,
-  getFileExtension,
   samplePixelColor,
 } from '../utils/imageConverter'
 import { formatFileSize } from '../utils/format'
@@ -86,6 +89,12 @@ export function ImageConverterPage() {
     size: number
   } | null>(null)
   const [isGeneratingTransparent, setIsGeneratingTransparent] = useState(false)
+
+  // Modal State for Custom PX Resize
+  const [resizeModalItem, setResizeModalItem] = useState<ImageConvertItem | null>(null)
+  const [modalCustomWidth, setModalCustomWidth] = useState<number | ''>('')
+  const [modalCustomHeight, setModalCustomHeight] = useState<number | ''>('')
+  const [modalLockAspectRatio, setModalLockAspectRatio] = useState<boolean>(true)
 
   // Keep a ref to items for cleanup on unmount
   const itemsRef = useRef(items)
@@ -294,12 +303,17 @@ export function ImageConverterPage() {
   }, [
     options.targetFormat,
     options.quality,
+    options.resizeMode,
     options.scale,
+    options.customWidth,
+    options.customHeight,
+    options.maintainAspectRatio,
     options.maxDimension,
     options.backgroundColor,
     options.filenameSuffix,
+    options.includeDimensionsInFilename,
     items.length,
-    items.map((i) => `${i.id}-${i.rotation}`).join(','),
+    items.map((i) => `${i.id}-${i.rotation}-${i.customWidth || ''}-${i.customHeight || ''}`).join(','),
   ])
 
   // Live recalculation for Transparent Export Modal
@@ -475,9 +489,17 @@ export function ImageConverterPage() {
   // Download single converted image
   const handleDownloadSingle = (item: ImageConvertItem) => {
     if (!item.convertedBlob) return
-    const filename = generateOutputFilename(item.name, options.targetFormat, options.filenameSuffix)
+    const finalW = item.convertedWidth || item.originalWidth
+    const finalH = item.convertedHeight || item.originalHeight
+    const filename = generateOutputFilename(
+      item.name,
+      options.targetFormat,
+      options.filenameSuffix,
+      { width: finalW, height: finalH },
+      options.includeDimensionsInFilename
+    )
     downloadBlob(item.convertedBlob, filename)
-    showToast(`Mengunduh ${filename}`, 'success')
+    showToast(`Mengunduh ${filename} (${finalW} × ${finalH} px)`, 'success')
   }
 
   // Download all as ZIP
@@ -494,7 +516,7 @@ export function ImageConverterPage() {
       const zipBlob = await createZipFromConvertedImages(readyItems, options)
       const zipName = `converted-images-${options.targetFormat}-${Date.now().toString().slice(-4)}.zip`
       downloadBlob(zipBlob, zipName)
-      showToast(`Arsip ZIP ${zipName} berhasil diunduh!`, 'success')
+      showToast(`Arsip ZIP ${zipName} (${readyItems.length} gambar) berhasil diunduh!`, 'success')
     } catch (err: any) {
       console.error(err)
       showToast('Gagal membuat file ZIP.', 'error')
@@ -506,38 +528,161 @@ export function ImageConverterPage() {
   // Copy converted image to clipboard
   const handleCopyImage = async (item: ImageConvertItem) => {
     if (!item.convertedBlob) return
+    const finalW = item.convertedWidth || item.originalWidth
+    const finalH = item.convertedHeight || item.originalHeight
     const success = await copyBlobToClipboard(item.convertedBlob)
     if (success) {
       setCopiedId(item.id)
-      showToast('Gambar berhasil disalin ke clipboard!', 'success')
+      showToast(`📋 Gambar (${finalW} × ${finalH} px) berhasil disalin ke clipboard! Langsung tempel (Ctrl+V) di aplikasi lain tanpa unduh.`, 'success')
       setTimeout(() => setCopiedId(null), 2500)
     } else {
-      showToast('Browser Anda membatasi penyalinan langsung. Silakan gunakan tombol Unduh.', 'info')
+      showToast('Browser Anda membatasi penyalinan langsung ke clipboard. Silakan gunakan tombol Unduh.', 'info')
     }
   }
 
   // Download transparent export
   const handleDownloadTransparentExport = () => {
     if (!transparentExportModalItem || !transparentPreviewResult) return
+    const finalW = transparentExportModalItem.originalWidth
+    const finalH = transparentExportModalItem.originalHeight
     const filename = generateOutputFilename(
       transparentExportModalItem.name,
       transparentTargetFormat,
-      '-transparent'
+      '-transparent',
+      { width: finalW, height: finalH },
+      options.includeDimensionsInFilename
     )
     downloadBlob(transparentPreviewResult.blob, filename)
-    showToast(`Mengunduh ${filename} (Latar Transparan)`, 'success')
+    showToast(`Mengunduh ${filename} (${finalW} × ${finalH} px - Latar Transparan)`, 'success')
     setTransparentExportModalItem(null)
   }
 
   // Copy transparent export to clipboard
   const handleCopyTransparentExport = async () => {
-    if (!transparentPreviewResult) return
+    if (!transparentExportModalItem || !transparentPreviewResult) return
+    const finalW = transparentExportModalItem.originalWidth
+    const finalH = transparentExportModalItem.originalHeight
     const success = await copyBlobToClipboard(transparentPreviewResult.blob)
     if (success) {
-      showToast('Gambar transparan berhasil disalin ke clipboard!', 'success')
+      showToast(`📋 Gambar transparan (${finalW} × ${finalH} px) berhasil disalin ke clipboard! Siap ditempel (Ctrl+V).`, 'success')
       setTransparentExportModalItem(null)
     } else {
       showToast('Gunakan tombol Unduh Transparan jika browser Anda membatasi clipboard.', 'info')
+    }
+  }
+
+  // Open resize modal for item
+  const openResizeModalForItem = (item: ImageConvertItem) => {
+    setResizeModalItem(item)
+    const baseW = item.rotation % 180 !== 0 ? item.originalHeight : item.originalWidth
+    const baseH = item.rotation % 180 !== 0 ? item.originalWidth : item.originalHeight
+    setModalCustomWidth(item.customWidth || item.convertedWidth || baseW)
+    setModalCustomHeight(item.customHeight || item.convertedHeight || baseH)
+    setModalLockAspectRatio(true)
+  }
+
+  // Handle modal width change
+  const handleModalWidthChange = (val: number | '') => {
+    setModalCustomWidth(val)
+    if (modalLockAspectRatio && resizeModalItem && typeof val === 'number' && val > 0) {
+      const baseW = resizeModalItem.rotation % 180 !== 0 ? resizeModalItem.originalHeight : resizeModalItem.originalWidth
+      const baseH = resizeModalItem.rotation % 180 !== 0 ? resizeModalItem.originalWidth : resizeModalItem.originalHeight
+      const newH = Math.max(1, Math.round((baseH * val) / baseW))
+      setModalCustomHeight(newH)
+    }
+  }
+
+  // Handle modal height change
+  const handleModalHeightChange = (val: number | '') => {
+    setModalCustomHeight(val)
+    if (modalLockAspectRatio && resizeModalItem && typeof val === 'number' && val > 0) {
+      const baseW = resizeModalItem.rotation % 180 !== 0 ? resizeModalItem.originalHeight : resizeModalItem.originalWidth
+      const baseH = resizeModalItem.rotation % 180 !== 0 ? resizeModalItem.originalWidth : resizeModalItem.originalHeight
+      const newW = Math.max(1, Math.round((baseW * val) / baseH))
+      setModalCustomWidth(newW)
+    }
+  }
+
+  // Apply modal resize
+  const handleApplyModalResize = (applyToAll = false) => {
+    if (!resizeModalItem) return
+    const w = typeof modalCustomWidth === 'number' && modalCustomWidth > 0 ? modalCustomWidth : undefined
+    const h = typeof modalCustomHeight === 'number' && modalCustomHeight > 0 ? modalCustomHeight : undefined
+
+    if (!w && !h) {
+      showToast('Masukkan ukuran piksel yang valid.', 'error')
+      return
+    }
+
+    if (applyToAll) {
+      setOptions((o) => ({
+        ...o,
+        resizeMode: 'custom-px',
+        customWidth: w,
+        customHeight: h,
+      }))
+      setItems((prev) =>
+        prev.map((i) => ({
+          ...i,
+          customWidth: w,
+          customHeight: h,
+          isConverting: true,
+        }))
+      )
+      showToast(`Ukuran ${w} × ${h} px diterapkan ke semua (${items.length}) gambar!`, 'success')
+    } else {
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === resizeModalItem.id
+            ? { ...i, customWidth: w, customHeight: h, isConverting: true }
+            : i
+        )
+      )
+      showToast(`Ukuran ${resizeModalItem.name} diubah menjadi ${w} × ${h} px!`, 'success')
+    }
+
+    setResizeModalItem(null)
+  }
+
+  // Reset modal resize
+  const handleResetModalResize = () => {
+    if (!resizeModalItem) return
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === resizeModalItem.id
+          ? { ...i, customWidth: undefined, customHeight: undefined, isConverting: true }
+          : i
+      )
+    )
+    showToast(`Ukuran ${resizeModalItem.name} dikembalikan ke asli.`, 'info')
+    setResizeModalItem(null)
+  }
+
+  // Global toolbar width change
+  const handleGlobalWidthChange = (val: number | '') => {
+    const num = typeof val === 'number' && val > 0 ? val : undefined
+    if (num && options.maintainAspectRatio && items.length > 0) {
+      const primaryItem = items[0]
+      const baseW = primaryItem.rotation % 180 !== 0 ? primaryItem.originalHeight : primaryItem.originalWidth
+      const baseH = primaryItem.rotation % 180 !== 0 ? primaryItem.originalWidth : primaryItem.originalHeight
+      const newH = Math.max(1, Math.round((baseH * num) / baseW))
+      setOptions((o) => ({ ...o, resizeMode: 'custom-px', customWidth: num, customHeight: newH }))
+    } else {
+      setOptions((o) => ({ ...o, resizeMode: 'custom-px', customWidth: num }))
+    }
+  }
+
+  // Global toolbar height change
+  const handleGlobalHeightChange = (val: number | '') => {
+    const num = typeof val === 'number' && val > 0 ? val : undefined
+    if (num && options.maintainAspectRatio && items.length > 0) {
+      const primaryItem = items[0]
+      const baseW = primaryItem.rotation % 180 !== 0 ? primaryItem.originalHeight : primaryItem.originalWidth
+      const baseH = primaryItem.rotation % 180 !== 0 ? primaryItem.originalWidth : primaryItem.originalHeight
+      const newW = Math.max(1, Math.round((baseW * num) / baseH))
+      setOptions((o) => ({ ...o, resizeMode: 'custom-px', customWidth: newW, customHeight: num }))
+    } else {
+      setOptions((o) => ({ ...o, resizeMode: 'custom-px', customHeight: num }))
     }
   }
 
@@ -863,39 +1008,214 @@ export function ImageConverterPage() {
                 )}
               </div>
 
-              {/* 3. Scale / Resize */}
+              {/* 3. Resolusi & Ukuran Gambar */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold uppercase tracking-wider text-text-muted">
-                    3. Skala Resolusi
+                    3. Ukuran & Resolusi
                   </label>
-                  <span className="text-xs font-bold text-primary">
-                    {Math.round(options.scale * 100)}% Ukuran
-                  </span>
-                </div>
 
-                <div className="grid grid-cols-4 gap-1.5">
-                  {scalePresets.map((preset) => (
+                  {/* Mode switcher tabs: Skala (%) vs Kustom (px) */}
+                  <div className="inline-flex rounded-xl bg-bg-hover p-0.5 border border-border-main text-[11px] font-bold">
                     <button
-                      key={preset.val}
                       type="button"
-                      onClick={() => setOptions((o) => ({ ...o, scale: preset.val }))}
-                      className={`py-2 px-1 rounded-xl text-xs font-semibold border transition-all text-center ${
-                        options.scale === preset.val
-                          ? 'bg-primary/10 border-primary text-primary font-bold'
-                          : 'bg-bg-card border-border-main text-text-muted hover:text-text-main'
+                      onClick={() => setOptions((o) => ({ ...o, resizeMode: 'scale' }))}
+                      className={`px-2.5 py-0.5 rounded-lg transition-all ${
+                        options.resizeMode === 'scale'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'text-text-muted hover:text-text-main'
                       }`}
                     >
-                      {preset.label}
+                      % Skala
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const firstItem = items[0]
+                        const baseW = firstItem ? (firstItem.rotation % 180 !== 0 ? firstItem.originalHeight : firstItem.originalWidth) : 1920
+                        const baseH = firstItem ? (firstItem.rotation % 180 !== 0 ? firstItem.originalWidth : firstItem.originalHeight) : 1080
+                        setOptions((o) => ({
+                          ...o,
+                          resizeMode: 'custom-px',
+                          customWidth: o.customWidth || baseW,
+                          customHeight: o.customHeight || baseH,
+                        }))
+                      }}
+                      className={`px-2.5 py-0.5 rounded-lg transition-all flex items-center space-x-1 ${
+                        options.resizeMode === 'custom-px'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'text-text-muted hover:text-text-main'
+                      }`}
+                    >
+                      <SlidersHorizontal className="w-3 h-3" />
+                      <span>Ubah px</span>
+                    </button>
+                  </div>
                 </div>
+
+                {options.resizeMode === 'scale' ? (
+                  /* Scale Mode */
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-text-muted text-[11px]">Rasio Pengali:</span>
+                      <span className="font-bold text-primary font-mono text-xs">
+                        {Math.round(options.scale * 100)}% Ukuran
+                        {items.length === 1 && (
+                          <span className="text-[11px] text-text-muted font-normal ml-1.5">
+                            ({items[0].convertedWidth || Math.round(items[0].originalWidth * options.scale)} × {items[0].convertedHeight || Math.round(items[0].originalHeight * options.scale)} px)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="1.5"
+                      step="0.05"
+                      value={options.scale}
+                      onChange={(e) => setOptions((o) => ({ ...o, scale: parseFloat(e.target.value) }))}
+                      className="w-full accent-primary cursor-pointer h-2 bg-bg-hover rounded-lg"
+                    />
+
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {scalePresets.map((preset) => (
+                        <button
+                          key={preset.val}
+                          type="button"
+                          onClick={() => setOptions((o) => ({ ...o, scale: preset.val }))}
+                          className={`py-1.5 px-1 rounded-xl text-xs font-semibold border transition-all text-center ${
+                            Math.abs(options.scale - preset.val) < 0.02
+                              ? 'bg-primary/10 border-primary text-primary font-bold'
+                              : 'bg-bg-card border-border-main text-text-muted hover:text-text-main'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  /* Custom PX Mode */
+                  <div className="space-y-2.5 p-3 bg-bg-hover/60 border border-primary/25 rounded-2xl animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-text-muted block">
+                          Lebar (px)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="10000"
+                          value={options.customWidth || ''}
+                          onChange={(e) =>
+                            handleGlobalWidthChange(e.target.value ? parseInt(e.target.value) : '')
+                          }
+                          placeholder="Lebar px"
+                          className="w-full px-2.5 py-1.5 bg-bg-card border border-border-main rounded-xl text-xs font-mono font-bold text-text-main focus:outline-none focus:border-primary shadow-xs"
+                        />
+                      </div>
+
+                      <div className="pt-4 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOptions((o) => ({ ...o, maintainAspectRatio: !o.maintainAspectRatio }))
+                          }
+                          title={
+                            options.maintainAspectRatio
+                              ? 'Kunci Rasio Aktif: Menjaga proporsi gambar'
+                              : 'Rasio Bebas: Anda dapat mengubah lebar & tinggi secara independen'
+                          }
+                          className={`p-2 rounded-xl border transition-all ${
+                            options.maintainAspectRatio
+                              ? 'bg-primary/10 border-primary text-primary shadow-xs'
+                              : 'bg-bg-card border-border-main text-text-muted hover:text-text-main'
+                          }`}
+                        >
+                          {options.maintainAspectRatio ? (
+                            <Lock className="w-3.5 h-3.5" />
+                          ) : (
+                            <Unlock className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-text-muted block">
+                          Tinggi (px)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="10000"
+                          value={options.customHeight || ''}
+                          onChange={(e) =>
+                            handleGlobalHeightChange(e.target.value ? parseInt(e.target.value) : '')
+                          }
+                          placeholder="Tinggi px"
+                          className="w-full px-2.5 py-1.5 bg-bg-card border border-border-main rounded-xl text-xs font-mono font-bold text-text-main focus:outline-none focus:border-primary shadow-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Presets for Custom PX */}
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {[
+                        { label: 'FHD', w: 1920, h: 1080 },
+                        { label: 'HD', w: 1280, h: 720 },
+                        { label: '1:1', w: 1080, h: 1080 },
+                        { label: '9:16', w: 1080, h: 1920 },
+                      ].map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() =>
+                            setOptions((o) => ({
+                              ...o,
+                              resizeMode: 'custom-px',
+                              customWidth: preset.w,
+                              customHeight: preset.h,
+                            }))
+                          }
+                          className={`py-0.5 px-2 rounded-lg text-[10px] font-mono font-bold border transition-all ${
+                            options.customWidth === preset.w && options.customHeight === preset.h
+                              ? 'bg-primary text-white border-primary shadow-xs'
+                              : 'bg-bg-card border-border-main text-text-muted hover:text-text-main'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+
+                      {items.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const first = items[0]
+                            const baseW = first.rotation % 180 !== 0 ? first.originalHeight : first.originalWidth
+                            const baseH = first.rotation % 180 !== 0 ? first.originalWidth : first.originalHeight
+                            setOptions((o) => ({
+                              ...o,
+                              resizeMode: 'custom-px',
+                              customWidth: baseW,
+                              customHeight: baseH,
+                            }))
+                          }}
+                          className="py-0.5 px-2 rounded-lg text-[10px] font-mono font-bold bg-bg-card border border-border-main text-text-muted hover:text-text-main"
+                        >
+                          Reset Asli
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Advanced Options (Foldable) */}
             {showAdvanced && (
-              <div className="pt-4 border-t border-border-main grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in duration-200">
+              <div className="pt-4 border-t border-border-main grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-in fade-in duration-200">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-text-main">Batas Maksimal Resolusi</label>
                   <select
@@ -938,6 +1258,23 @@ export function ImageConverterPage() {
                     className="w-full bg-bg-card border border-border-main rounded-xl px-3 py-2 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:border-primary"
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-text-main">Ukuran (px) di Nama File</label>
+                  <label className="flex items-center space-x-2.5 pt-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={options.includeDimensionsInFilename || false}
+                      onChange={(e) =>
+                        setOptions((o) => ({ ...o, includeDimensionsInFilename: e.target.checked }))
+                      }
+                      className="w-4 h-4 rounded border-border-main text-primary focus:ring-primary accent-primary"
+                    />
+                    <span className="text-xs text-text-main font-medium">
+                      Sertakan px (misal <span className="font-mono text-primary font-bold text-[11px]">_1920x1080</span>)
+                    </span>
+                  </label>
+                </div>
               </div>
             )}
           </div>
@@ -951,6 +1288,20 @@ export function ImageConverterPage() {
                 </span>
                 <p className="text-xl sm:text-2xl font-black text-text-main">{items.length} Gambar</p>
               </div>
+
+              {items.length === 1 && (
+                <>
+                  <div className="h-10 w-px bg-border-main hidden sm:block" />
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                      Dimensi Output
+                    </span>
+                    <p className="text-xl sm:text-2xl font-black text-primary font-mono">
+                      {items[0].convertedWidth || items[0].originalWidth} × {items[0].convertedHeight || items[0].originalHeight} px
+                    </p>
+                  </div>
+                </>
+              )}
 
               <div className="h-10 w-px bg-border-main hidden sm:block" />
 
@@ -992,8 +1343,8 @@ export function ImageConverterPage() {
               )}
             </div>
 
-            {/* Batch Actions */}
-            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
+            {/* Batch & Primary Actions */}
+            <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-end">
               <input
                 id={addMoreInputId}
                 type="file"
@@ -1009,39 +1360,86 @@ export function ImageConverterPage() {
               />
               <label
                 htmlFor={addMoreInputId}
-                className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-2xl bg-bg-card hover:bg-bg-hover border border-border-main text-text-main text-xs font-bold transition-all cursor-pointer shadow-xs"
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 rounded-2xl bg-bg-card hover:bg-bg-hover border border-border-main text-text-main text-xs font-bold transition-all cursor-pointer shadow-xs"
               >
                 <Plus className="w-4 h-4 text-primary" />
-                <span>Tambah Gambar</span>
+                <span>Tambah</span>
               </label>
 
               <button
                 type="button"
                 onClick={handleClearAll}
-                className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 rounded-2xl bg-bg-card hover:bg-rose-500/10 border border-border-main hover:border-rose-500/30 text-text-muted hover:text-rose-500 text-xs font-semibold transition-all"
+                className="inline-flex items-center space-x-1.5 px-3 py-2.5 rounded-2xl bg-bg-card hover:bg-rose-500/10 border border-border-main hover:border-rose-500/30 text-text-muted hover:text-rose-500 text-xs font-semibold transition-all"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Hapus Semua</span>
+                <span>Hapus</span>
               </button>
 
-              <button
-                type="button"
-                onClick={handleDownloadZip}
-                disabled={isProcessingBatch || items.length === 0}
-                className="inline-flex items-center space-x-2 px-6 py-2.5 rounded-2xl bg-primary text-white text-xs sm:text-sm font-bold hover:bg-primary-hover transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 active:translate-y-0"
-              >
-                {isProcessingBatch ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Mengemas ZIP...</span>
-                  </>
-                ) : (
-                  <>
-                    <FolderArchive className="w-4 h-4" />
-                    <span>Unduh Semua (.ZIP)</span>
-                  </>
-                )}
-              </button>
+              {/* Direct Quick Copy for Single Image */}
+              {items.length === 1 && (
+                <button
+                  type="button"
+                  onClick={() => handleCopyImage(items[0])}
+                  disabled={!items[0].convertedBlob}
+                  title="Salin hasil gambar langsung ke clipboard tanpa download (Ctrl+V di aplikasi lain)"
+                  className={`inline-flex items-center space-x-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-xs disabled:opacity-50 hover:-translate-y-0.5 active:translate-y-0 ${
+                    copiedId === items[0].id
+                      ? 'bg-emerald-500 text-white shadow-md ring-2 ring-emerald-500/30'
+                      : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40'
+                  }`}
+                >
+                  {copiedId === items[0].id ? (
+                    <>
+                      <Check className="w-4 h-4 text-white" />
+                      <span>Hasil Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span>Salin Hasil</span>
+                      <span className="text-[11px] font-mono opacity-85 hidden sm:inline">
+                        ({items[0].convertedWidth || items[0].originalWidth} × {items[0].convertedHeight || items[0].originalHeight} px)
+                      </span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              {/* Download Action: Single Direct Download or Batch ZIP */}
+              {items.length === 1 ? (
+                <button
+                  type="button"
+                  onClick={() => handleDownloadSingle(items[0])}
+                  disabled={!items[0].convertedBlob}
+                  title={`Unduh ${items[0].name} (${items[0].convertedWidth || items[0].originalWidth} × ${items[0].convertedHeight || items[0].originalHeight} px)`}
+                  className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-2xl bg-primary text-white text-xs sm:text-sm font-bold hover:bg-primary-hover transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Unduh {options.targetFormat.toUpperCase()}</span>
+                  <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-md bg-black/25 text-white">
+                    {items[0].convertedWidth || items[0].originalWidth} × {items[0].convertedHeight || items[0].originalHeight} px
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleDownloadZip}
+                  disabled={isProcessingBatch || items.length === 0}
+                  className="inline-flex items-center space-x-2 px-6 py-2.5 rounded-2xl bg-primary text-white text-xs sm:text-sm font-bold hover:bg-primary-hover transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  {isProcessingBatch ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Mengemas ZIP...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FolderArchive className="w-4 h-4" />
+                      <span>Unduh Semua ({items.length} Gambar .ZIP)</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
@@ -1052,6 +1450,8 @@ export function ImageConverterPage() {
               const convertedKb = item.convertedSize || item.originalSize
               const diffPercent = Math.round(((convertedKb - originalKb) / originalKb) * 100)
               const isSaved = diffPercent < 0
+              const finalW = item.convertedWidth || item.originalWidth
+              const finalH = item.convertedHeight || item.originalHeight
 
               return (
                 <div
@@ -1113,19 +1513,29 @@ export function ImageConverterPage() {
                         </button>
                       </div>
 
-                      {/* Dimensions */}
-                      <div className="flex items-center space-x-2 text-[11px] text-text-muted">
-                        <span className="font-mono">
-                          {item.originalWidth} × {item.originalHeight} px
+                      {/* Dimensions: Asli & Output px */}
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <span className="font-mono text-[11px] px-2 py-0.5 rounded-lg bg-bg-hover text-text-muted border border-border-main" title="Ukuran asli gambar">
+                          Asli: {item.originalWidth} × {item.originalHeight} px
                         </span>
-                        {item.convertedWidth && item.convertedWidth !== item.originalWidth && (
-                          <>
-                            <ArrowRight className="w-3 h-3" />
-                            <span className="font-mono font-semibold text-primary">
-                              {item.convertedWidth} × {item.convertedHeight} px
-                            </span>
-                          </>
-                        )}
+                        <ArrowRight className="w-3 h-3 text-text-muted" />
+                        <button
+                          type="button"
+                          onClick={() => openResizeModalForItem(item)}
+                          title="Klik untuk mengubah ukuran piksel (px) gambar ini"
+                          className="inline-flex items-center space-x-1 font-mono text-[11px] px-2 py-0.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-bold border border-primary/30 transition-all cursor-pointer group hover:scale-[1.02]"
+                        >
+                          <span>Output: {finalW} × {finalH} px</span>
+                          <SlidersHorizontal className="w-3 h-3 opacity-70 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openResizeModalForItem(item)}
+                          title="Ubah resolusi lebar & tinggi (px)"
+                          className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-bg-hover hover:bg-bg-hover/80 border border-border-main text-text-muted hover:text-text-main text-[10px] font-semibold transition-all"
+                        >
+                          <span>Ubah px</span>
+                        </button>
                       </div>
 
                       {/* Size Comparison Badge */}
@@ -1170,7 +1580,7 @@ export function ImageConverterPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {/* Button to Open Transparent / Remove BG Settings for this image */}
                       <button
                         type="button"
@@ -1185,40 +1595,230 @@ export function ImageConverterPage() {
                         <span className="text-[11px]">Opsi Transparan</span>
                       </button>
 
-                      {/* Standard Copy Button */}
+                      {/* Salin Hasil (Copy to Clipboard) - Enhanced & Prominent */}
                       <button
                         type="button"
                         onClick={() => handleCopyImage(item)}
-                        title="Salin hasil ke clipboard"
-                        className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-bg-hover hover:bg-bg-hover/80 text-text-main text-xs font-semibold border border-border-main transition-colors"
+                        disabled={!item.convertedBlob}
+                        title={`Salin hasil (${finalW} × ${finalH} px) ke clipboard. Langsung tempel (Ctrl+V) di aplikasi lain tanpa perlu download.`}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 hover:-translate-y-0.5 active:translate-y-0 ${
+                          copiedId === item.id
+                            ? 'bg-emerald-500 text-white shadow-md ring-2 ring-emerald-500/30'
+                            : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 hover:border-emerald-500/50'
+                        }`}
                       >
                         {copiedId === item.id ? (
                           <>
-                            <Check className="w-3.5 h-3.5 text-emerald-500" />
-                            <span className="text-emerald-600 text-[11px]">Tersalin</span>
+                            <Check className="w-3.5 h-3.5 text-white" />
+                            <span className="text-[11px]">Tersalin ({finalW} × ${finalH} px)!</span>
                           </>
                         ) : (
                           <>
-                            <Copy className="w-3.5 h-3.5 text-text-muted" />
-                            <span className="text-[11px]">Salin</span>
+                            <Copy className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-[11px]">Salin Hasil</span>
                           </>
                         )}
                       </button>
 
-                      {/* Standard Download Button */}
+                      {/* Standard Download Button with Dimensions */}
                       <button
                         type="button"
                         onClick={() => handleDownloadSingle(item)}
-                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-all shadow-xs hover:shadow-sm"
+                        disabled={!item.convertedBlob}
+                        title={`Unduh file ${options.targetFormat.toUpperCase()} dengan ukuran ${finalW} × ${finalH} px`}
+                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-all shadow-xs hover:shadow-sm disabled:opacity-50 hover:-translate-y-0.5 active:translate-y-0"
                       >
                         <Download className="w-3.5 h-3.5" />
-                        <span>Unduh {getFileExtension(options.targetFormat).toUpperCase()}</span>
+                        <span>Unduh {options.targetFormat.toUpperCase()}</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-black/25 text-white font-medium">
+                          {finalW} × {finalH} px
+                        </span>
                       </button>
                     </div>
                   </div>
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Ubah Ukuran Piksel (Custom PX Resize) */}
+      {resizeModalItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg bg-bg-card border border-border-main rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border-main bg-bg-card/80">
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                  <Maximize2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-text-main">
+                    Ubah Ukuran Gambar (px)
+                  </h3>
+                  <p className="text-xs text-text-muted truncate max-w-xs">
+                    {resizeModalItem.name}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setResizeModalItem(null)}
+                className="p-2 rounded-xl bg-bg-hover hover:bg-bg-hover/80 text-text-muted hover:text-text-main transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-5 overflow-y-auto">
+              {/* Dimensions Comparison Indicator */}
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-bg-hover/60 border border-border-main text-xs">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] uppercase font-bold text-text-muted block">Ukuran Asli</span>
+                  <span className="font-mono font-bold text-text-main">
+                    {resizeModalItem.originalWidth} × {resizeModalItem.originalHeight} px
+                  </span>
+                </div>
+                <ArrowRight className="w-4 h-4 text-text-muted" />
+                <div className="space-y-0.5 text-right">
+                  <span className="text-[10px] uppercase font-bold text-primary block">Ukuran Baru</span>
+                  <span className="font-mono font-extrabold text-primary">
+                    {modalCustomWidth || 0} × {modalCustomHeight || 0} px
+                  </span>
+                </div>
+              </div>
+
+              {/* Width & Height Inputs */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-text-main">Tentukan Dimensi Piksel:</label>
+                  <span className="text-[11px] text-text-muted">
+                    {modalLockAspectRatio ? '🔗 Rasio Terkunci (Proporsional)' : '🔓 Rasio Bebas (Bisa Peregangan)'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 space-y-1">
+                    <label className="text-[11px] font-semibold text-text-muted block">Lebar (px)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10000"
+                      value={modalCustomWidth}
+                      onChange={(e) =>
+                        handleModalWidthChange(e.target.value ? parseInt(e.target.value) : '')
+                      }
+                      className="w-full px-3 py-2.5 bg-bg-card border border-border-main rounded-2xl text-sm font-mono font-bold text-text-main focus:outline-none focus:border-primary shadow-xs"
+                      placeholder="Contoh: 1920"
+                    />
+                  </div>
+
+                  <div className="pt-6 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setModalLockAspectRatio(!modalLockAspectRatio)}
+                      title={
+                        modalLockAspectRatio
+                          ? 'Kunci Rasio Aktif: Menjaga proporsi gambar agar tidak terdistorsi'
+                          : 'Rasio Bebas: Anda dapat mengubah lebar & tinggi secara independen'
+                      }
+                      className={`p-2.5 rounded-2xl border transition-all ${
+                        modalLockAspectRatio
+                          ? 'bg-primary/10 border-primary text-primary shadow-xs'
+                          : 'bg-bg-hover border-border-main text-text-muted hover:text-text-main'
+                      }`}
+                    >
+                      {modalLockAspectRatio ? (
+                        <Lock className="w-4 h-4" />
+                      ) : (
+                        <Unlock className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="flex-1 space-y-1">
+                    <label className="text-[11px] font-semibold text-text-muted block">Tinggi (px)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10000"
+                      value={modalCustomHeight}
+                      onChange={(e) =>
+                        handleModalHeightChange(e.target.value ? parseInt(e.target.value) : '')
+                      }
+                      className="w-full px-3 py-2.5 bg-bg-card border border-border-main rounded-2xl text-sm font-mono font-bold text-text-main focus:outline-none focus:border-primary shadow-xs"
+                      placeholder="Contoh: 1080"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-text-main block">Pilihan Resolusi Cepat:</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { label: 'Ukuran Asli', w: resizeModalItem.originalWidth, h: resizeModalItem.originalHeight },
+                    { label: 'Full HD 1080p', w: 1920, h: 1080 },
+                    { label: 'HD 720p', w: 1280, h: 720 },
+                    { label: 'Instagram (1:1)', w: 1080, h: 1080 },
+                    { label: 'Story / Reel (9:16)', w: 1080, h: 1920 },
+                    { label: 'Web Optimal', w: 800, h: 600 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        setModalCustomWidth(preset.w)
+                        setModalCustomHeight(preset.h)
+                      }}
+                      className={`p-2.5 rounded-2xl text-left border transition-all text-xs ${
+                        modalCustomWidth === preset.w && modalCustomHeight === preset.h
+                          ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs'
+                          : 'bg-bg-hover/60 border-border-main text-text-muted hover:text-text-main'
+                      }`}
+                    >
+                      <span className="font-semibold block">{preset.label}</span>
+                      <span className="font-mono text-[10px] opacity-75">{preset.w} × {preset.h} px</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-6 py-4 border-t border-border-main bg-bg-card flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleResetModalResize}
+                className="px-3.5 py-2 rounded-xl bg-bg-hover hover:bg-bg-hover/80 text-text-muted hover:text-text-main text-xs font-semibold transition-colors"
+              >
+                Reset ke Asli
+              </button>
+
+              <div className="flex items-center space-x-2">
+                {items.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleApplyModalResize(true)}
+                    className="px-3.5 py-2 rounded-xl bg-bg-hover hover:bg-bg-hover/80 text-text-main text-xs font-bold border border-border-main transition-colors shadow-xs"
+                  >
+                    Terapkan Semua ({items.length})
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handleApplyModalResize(false)}
+                  className="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-colors shadow-sm"
+                >
+                  Terapkan Ukuran
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1285,9 +1885,15 @@ export function ImageConverterPage() {
                   </div>
 
                   {transparentPreviewResult && (
-                    <span className="text-primary font-mono font-bold">
-                      Ukuran: {formatFileSize(transparentPreviewResult.size)}
-                    </span>
+                    <div className="flex items-center space-x-1.5 text-xs">
+                      <span className="text-primary font-mono font-bold">
+                        {formatFileSize(transparentPreviewResult.size)}
+                      </span>
+                      <span className="text-text-muted">•</span>
+                      <span className="font-mono font-bold text-text-main px-2 py-0.5 rounded-md bg-bg-hover">
+                        {transparentExportModalItem.originalWidth} × {transparentExportModalItem.originalHeight} px
+                      </span>
+                    </div>
                   )}
                 </div>
 
@@ -1570,10 +2176,10 @@ export function ImageConverterPage() {
                   type="button"
                   onClick={handleCopyTransparentExport}
                   disabled={!transparentPreviewResult}
-                  className="px-4 py-2 rounded-xl bg-bg-hover hover:bg-bg-hover/80 text-text-main text-xs font-bold border border-border-main transition-colors inline-flex items-center space-x-1.5 disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-500/30 transition-colors inline-flex items-center space-x-1.5 disabled:opacity-50"
                 >
                   <Copy className="w-3.5 h-3.5" />
-                  <span>Salin Transparan</span>
+                  <span>Salin Hasil ({transparentExportModalItem.originalWidth} × {transparentExportModalItem.originalHeight} px)</span>
                 </button>
 
                 <button
@@ -1583,7 +2189,7 @@ export function ImageConverterPage() {
                   className="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-colors inline-flex items-center space-x-1.5 shadow-sm disabled:opacity-50"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Unduh {transparentTargetFormat.toUpperCase()} Transparan</span>
+                  <span>Unduh {transparentTargetFormat.toUpperCase()} ({transparentExportModalItem.originalWidth} × {transparentExportModalItem.originalHeight} px)</span>
                 </button>
               </div>
             </div>
@@ -1722,25 +2328,41 @@ export function ImageConverterPage() {
                 Pengaturan aktif:{' '}
                 <strong className="text-text-main uppercase">{options.targetFormat}</strong> •{' '}
                 {options.targetFormat === 'png' ? 'Lossless' : `Kualitas ${Math.round(options.quality * 100)}%`} •{' '}
-                Skala {Math.round(options.scale * 100)}%
+                Skala {Math.round(options.scale * 100)}% •{' '}
+                <span className="font-mono font-bold text-primary">
+                  {selectedPreviewItem.convertedWidth || selectedPreviewItem.originalWidth} × {selectedPreviewItem.convertedHeight || selectedPreviewItem.originalHeight} px
+                </span>
               </div>
 
               <div className="flex items-center space-x-3">
                 <button
                   type="button"
                   onClick={() => handleCopyImage(selectedPreviewItem)}
-                  className="px-4 py-2 rounded-xl bg-bg-hover text-text-main text-xs font-bold border border-border-main hover:border-primary/50 transition-colors inline-flex items-center space-x-1.5"
+                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-colors inline-flex items-center space-x-1.5 ${
+                    copiedId === selectedPreviewItem.id
+                      ? 'bg-emerald-500 text-white border-emerald-600 shadow-md ring-2 ring-emerald-500/30'
+                      : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                  }`}
                 >
-                  <Copy className="w-4 h-4" />
-                  <span>Salin Gambar</span>
+                  {copiedId === selectedPreviewItem.id ? (
+                    <>
+                      <Check className="w-4 h-4 text-white" />
+                      <span>Hasil Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span>Salin Hasil ({selectedPreviewItem.convertedWidth || selectedPreviewItem.originalWidth} × {selectedPreviewItem.convertedHeight || selectedPreviewItem.originalHeight} px)</span>
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleDownloadSingle(selectedPreviewItem)}
-                  className="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-colors inline-flex items-center space-x-1.5 shadow-sm"
+                  className="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-colors inline-flex items-center space-x-1.5 shadow-sm hover:-translate-y-0.5 active:translate-y-0"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Unduh File</span>
+                  <span>Unduh {options.targetFormat.toUpperCase()} ({selectedPreviewItem.convertedWidth || selectedPreviewItem.originalWidth} × {selectedPreviewItem.convertedHeight || selectedPreviewItem.originalHeight} px)</span>
                 </button>
               </div>
             </div>

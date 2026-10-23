@@ -33,6 +33,9 @@ export interface ImageConvertItem {
   previewUrl: string
   rotation: number // 0, 90, 180, 270
   
+  customWidth?: number
+  customHeight?: number
+
   // Converted state
   convertedBlob?: Blob
   convertedUrl?: string
@@ -43,13 +46,20 @@ export interface ImageConvertItem {
   error?: string
 }
 
+export type ResizeMode = 'scale' | 'custom-px'
+
 export interface ConvertOptions {
   targetFormat: TargetFormat
   quality: number // 0.05 to 1.0 (e.g., 0.85 = 85%)
+  resizeMode: ResizeMode // 'scale' | 'custom-px'
   scale: number // 0.1 to 1.0 (e.g., 1.0 = 100%)
+  customWidth?: number // in px (e.g. 1920)
+  customHeight?: number // in px (e.g. 1080)
+  maintainAspectRatio: boolean // true = lock aspect ratio
   maxDimension?: number // 0 for no limit, or 3840, 1920, 1280, 800
   backgroundColor: string // '#ffffff', '#000000', 'transparent'
   filenameSuffix: string // e.g., '-converted', ''
+  includeDimensionsInFilename?: boolean // e.g., true -> '_1920x1080'
 
   // Background Removal options (100% Pure Canvas / Client-Side)
   enableRemoveBg: boolean
@@ -64,10 +74,15 @@ export interface ConvertOptions {
 export const DEFAULT_CONVERT_OPTIONS: ConvertOptions = {
   targetFormat: 'webp',
   quality: 0.85,
+  resizeMode: 'scale',
   scale: 1,
+  customWidth: undefined,
+  customHeight: undefined,
+  maintainAspectRatio: true,
   maxDimension: 0,
   backgroundColor: '#ffffff',
   filenameSuffix: '',
+  includeDimensionsInFilename: false,
   
   // Background removal defaults
   enableRemoveBg: false,
@@ -366,17 +381,33 @@ export function convertSingleImage(
         let srcHeight = img.naturalHeight || img.height
 
         const isRotated90or270 = item.rotation % 180 !== 0
-        let targetW = isRotated90or270 ? srcHeight : srcWidth
-        let targetH = isRotated90or270 ? srcWidth : srcHeight
+        const baseW = isRotated90or270 ? srcHeight : srcWidth
+        const baseH = isRotated90or270 ? srcWidth : srcHeight
 
-        // Apply scale
-        if (options.scale && options.scale > 0 && options.scale !== 1) {
-          targetW = Math.round(targetW * options.scale)
-          targetH = Math.round(targetH * options.scale)
+        let targetW = baseW
+        let targetH = baseH
+
+        // Check per-item override or global options
+        const customW = item.customWidth !== undefined ? item.customWidth : (options.resizeMode === 'custom-px' ? options.customWidth : undefined)
+        const customH = item.customHeight !== undefined ? item.customHeight : (options.resizeMode === 'custom-px' ? options.customHeight : undefined)
+
+        if (customW && customW > 0 && customH && customH > 0) {
+          targetW = Math.round(customW)
+          targetH = Math.round(customH)
+        } else if (customW && customW > 0) {
+          targetW = Math.round(customW)
+          targetH = Math.round((baseH * customW) / baseW)
+        } else if (customH && customH > 0) {
+          targetH = Math.round(customH)
+          targetW = Math.round((baseW * customH) / baseH)
+        } else if (options.scale && options.scale > 0 && options.scale !== 1) {
+          targetW = Math.round(baseW * options.scale)
+          targetH = Math.round(baseH * options.scale)
         }
 
-        // Apply max dimension constraint
-        if (options.maxDimension && options.maxDimension > 0) {
+        // Apply max dimension constraint if scale mode and maxDimension set
+        const isCustomPxActive = (customW && customW > 0) || (customH && customH > 0)
+        if (!isCustomPxActive && options.maxDimension && options.maxDimension > 0) {
           const maxDim = options.maxDimension
           if (targetW > maxDim || targetH > maxDim) {
             if (targetW >= targetH) {
@@ -468,16 +499,22 @@ export function convertSingleImage(
 }
 
 /**
- * Builds the target filename based on original name and options
+ * Builds the target filename based on original name, options, and optional dimensions
  */
 export function generateOutputFilename(
   originalName: string,
   targetFormat: TargetFormat,
-  suffix = ''
+  suffix = '',
+  dimensions?: { width: number; height: number },
+  includeDimensions = false
 ): string {
   const baseName = originalName.replace(/\.[^/.]+$/, '')
   const ext = getFileExtension(targetFormat)
-  return `${baseName}${suffix}${ext}`
+  const dimPart =
+    includeDimensions && dimensions && dimensions.width > 0 && dimensions.height > 0
+      ? `_${dimensions.width}x${dimensions.height}`
+      : ''
+  return `${baseName}${suffix}${dimPart}${ext}`
 }
 
 /**
@@ -510,13 +547,27 @@ export async function createZipFromConvertedImages(
   for (const item of items) {
     if (!item.convertedBlob) continue
 
-    let filename = generateOutputFilename(item.name, options.targetFormat, options.filenameSuffix)
+    const dimensions = {
+      width: item.convertedWidth || item.originalWidth,
+      height: item.convertedHeight || item.originalHeight,
+    }
+    let filename = generateOutputFilename(
+      item.name,
+      options.targetFormat,
+      options.filenameSuffix,
+      dimensions,
+      options.includeDimensionsInFilename
+    )
     if (nameCounts.has(filename)) {
       const count = nameCounts.get(filename)! + 1
       nameCounts.set(filename, count)
       const baseName = item.name.replace(/\.[^/.]+$/, '')
       const ext = getFileExtension(options.targetFormat)
-      filename = `${baseName}${options.filenameSuffix}_(${count})${ext}`
+      const dimPart =
+        options.includeDimensionsInFilename && dimensions.width > 0 && dimensions.height > 0
+          ? `_${dimensions.width}x${dimensions.height}`
+          : ''
+      filename = `${baseName}${options.filenameSuffix}${dimPart}_(${count})${ext}`
     } else {
       nameCounts.set(filename, 1)
     }
@@ -542,40 +593,60 @@ export async function copyBlobToClipboard(blob: Blob): Promise<boolean> {
 
     // Modern browsers usually require image/png for clipboard writing
     if (blob.type === 'image/png') {
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob }),
-      ])
-      return true
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob }),
+        ])
+        return true
+      } catch (err) {
+        console.warn('Direct png copy failed, attempting canvas conversion:', err)
+      }
     }
 
-    // If it's jpg or webp, convert to png blob for clipboard compatibility
-    const img = new Image()
-    const url = URL.createObjectURL(blob)
-    await new Promise((resolve, reject) => {
-      img.onload = resolve
-      img.onerror = reject
-      img.src = url
-    })
-    URL.revokeObjectURL(url)
+    // Helper to generate PNG blob from any image blob
+    const createPngBlob = (): Promise<Blob> => {
+      return new Promise<Blob>((resolve, reject) => {
+        const img = new Image()
+        const url = URL.createObjectURL(blob)
+        img.onload = () => {
+          URL.revokeObjectURL(url)
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth || img.width
+          canvas.height = img.naturalHeight || img.height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('Canvas 2D context tidak tersedia.'))
+            return
+          }
+          ctx.drawImage(img, 0, 0)
+          canvas.toBlob((png) => {
+            if (png) resolve(png)
+            else reject(new Error('Gagal mengonversi ke format PNG untuk clipboard.'))
+          }, 'image/png')
+        }
+        img.onerror = () => {
+          URL.revokeObjectURL(url)
+          reject(new Error('Gagal memuat gambar untuk clipboard.'))
+        }
+        img.src = url
+      })
+    }
 
-    const canvas = document.createElement('canvas')
-    canvas.width = img.width
-    canvas.height = img.height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return false
-    ctx.drawImage(img, 0, 0)
-
-    const pngBlob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/png')
-    )
-
-    if (pngBlob) {
+    // Attempt direct Promise pass to retain user activation in modern Chromium/Safari
+    try {
+      const pngPromise = createPngBlob()
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': pngPromise }),
+      ])
+      return true
+    } catch {
+      // Fallback: await blob resolution first
+      const pngBlob = await createPngBlob()
       await navigator.clipboard.write([
         new ClipboardItem({ 'image/png': pngBlob }),
       ])
       return true
     }
-    return false
   } catch (err) {
     console.warn('Clipboard write error:', err)
     return false
