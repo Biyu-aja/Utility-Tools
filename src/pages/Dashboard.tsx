@@ -5,7 +5,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import { FileImage, Scissors, ArrowRight, ShieldCheck, Zap, Sparkles, MessageSquare, Smartphone } from 'lucide-react'
+import { FileImage, Scissors, ArrowRight, ShieldCheck, Zap, Sparkles, MessageSquare, Smartphone, FileSpreadsheet } from 'lucide-react'
 import { AppRoutes } from '../constants/listed'
 
 export function DashboardPage() {
@@ -32,7 +32,7 @@ export function DashboardPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-text-main">Daftar Utility & Generator Tools</h2>
-          <span className="text-xs text-text-muted">5 Tools Aktif</span>
+          <span className="text-xs text-text-muted">7 Tools Aktif</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -128,6 +128,74 @@ export function DashboardPage() {
               <span className="flex items-center space-x-1.5 text-text-muted font-normal">
                 <Zap className="w-3.5 h-3.5 text-amber-500" />
                 <span>Copy-Paste & Slider Kualitas</span>
+              </span>
+              <span className="flex items-center space-x-1 group-hover:translate-x-1 transition-transform">
+                <span>Buka Tool</span>
+                <ArrowRight className="w-4 h-4" />
+              </span>
+            </div>
+          </Link>
+
+          {/* CSV to XLSX Card */}
+          <Link
+            to={`/${AppRoutes.CsvToXlsx}`}
+            className="group relative bg-bg-card hover:bg-bg-hover/80 border border-border-main hover:border-primary/50 rounded-3xl p-6 transition-all duration-200 shadow-xs hover:shadow-md flex flex-col justify-between space-y-6"
+          >
+            <div className="space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
+                <FileSpreadsheet className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="inline-block text-[11px] font-bold text-primary tracking-wider uppercase mb-1">
+                  Data & Spreadsheet
+                </div>
+                <h3 className="text-lg font-bold text-text-main group-hover:text-primary transition-colors">
+                  CSV to Excel (.xlsx)
+                </h3>
+                <p className="text-xs sm:text-sm text-text-muted mt-1 leading-relaxed">
+                  Konversi file CSV / TSV atau teks berpemisah ke spreadsheet Excel (.xlsx) dengan deteksi otomatis pemisah, format angka cerdas, dan auto-fit lebar kolom.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-border-main/60 flex items-center justify-between text-xs font-semibold text-primary">
+              <span className="flex items-center space-x-1.5 text-text-muted font-normal">
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                <span>Auto-Detect & Batch</span>
+              </span>
+              <span className="flex items-center space-x-1 group-hover:translate-x-1 transition-transform">
+                <span>Buka Tool</span>
+                <ArrowRight className="w-4 h-4" />
+              </span>
+            </div>
+          </Link>
+
+          {/* XLSX to CSV Card */}
+          <Link
+            to={`/${AppRoutes.XlsxToCsv}`}
+            className="group relative bg-bg-card hover:bg-bg-hover/80 border border-border-main hover:border-emerald-500/50 rounded-3xl p-6 transition-all duration-200 shadow-xs hover:shadow-md flex flex-col justify-between space-y-6"
+          >
+            <div className="space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <FileSpreadsheet className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="inline-block text-[11px] font-bold text-emerald-600 tracking-wider uppercase mb-1">
+                  Spreadsheet ke Teks
+                </div>
+                <h3 className="text-lg font-bold text-text-main group-hover:text-emerald-600 transition-colors">
+                  Excel (.xlsx) to CSV
+                </h3>
+                <p className="text-xs sm:text-sm text-text-muted mt-1 leading-relaxed">
+                  Ekspor spreadsheet Excel (.xlsx) ke file CSV berpemisah koma/titik koma, dukungan multi-sheet, salin teks ke clipboard, dan encoding UTF-8 BOM.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-border-main/60 flex items-center justify-between text-xs font-semibold text-emerald-600">
+              <span className="flex items-center space-x-1.5 text-text-muted font-normal">
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                <span>Multi-Sheet & UTF-8 BOM</span>
               </span>
               <span className="flex items-center space-x-1 group-hover:translate-x-1 transition-transform">
                 <span>Buka Tool</span>

@@ -4,7 +4,7 @@
  * This file: sidemenuItems.tsx (Defines the side menu navigation items and Lucide icons used).
  */
 
-import { LayoutDashboard, Settings as SettingsIcon, FileImage, Scissors, Sparkles, MessageSquare, Smartphone } from 'lucide-react'
+import { LayoutDashboard, Settings as SettingsIcon, FileImage, Scissors, Sparkles, MessageSquare, Smartphone, FileSpreadsheet, ArrowLeftRight } from 'lucide-react'
 import { AppRoutes } from './listed'
 
 export const sidemenuItems = [
@@ -27,6 +27,16 @@ export const sidemenuItems = [
     name: 'Convert Gambar',
     href: AppRoutes.ImageConverter,
     icons: <Sparkles className="w-4.5 h-4.5" />,
+  },
+  {
+    name: 'CSV to XLSX',
+    href: AppRoutes.CsvToXlsx,
+    icons: <FileSpreadsheet className="w-4.5 h-4.5" />,
+  },
+  {
+    name: 'XLSX to CSV',
+    href: AppRoutes.XlsxToCsv,
+    icons: <ArrowLeftRight className="w-4.5 h-4.5" />,
   },
   {
     name: 'Photo to PDF',

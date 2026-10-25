@@ -14,6 +14,8 @@ import { SplitPDFPage } from '../pages/SplitPDF'
 import { FakeChatPage } from '../pages/FakeChat'
 import { MockupGeneratorPage } from '../pages/MockupGenerator'
 import { SettingsPage } from '../pages/Settings'
+import { CsvToXlsxPage } from '../pages/CsvToXlsx'
+import { XlsxToCsvPage } from '../pages/XlsxToCsv'
 
 export const router = createBrowserRouter([
   {
@@ -39,6 +41,14 @@ export const router = createBrowserRouter([
       {
         path: AppRoutes.ImageConverter,
         element: <ImageConverterPage />,
+      },
+      {
+        path: AppRoutes.CsvToXlsx,
+        element: <CsvToXlsxPage />,
+      },
+      {
+        path: AppRoutes.XlsxToCsv,
+        element: <XlsxToCsvPage />,
       },
       {
         path: AppRoutes.Settings,

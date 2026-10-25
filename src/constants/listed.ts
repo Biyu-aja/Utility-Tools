@@ -12,6 +12,8 @@ export const AppRoutes = {
   ImageConverter: "image-converter",
   FakeChat: "fake-chat",
   MockupGenerator: "mockup-generator",
+  CsvToXlsx: "csv-to-xlsx",
+  XlsxToCsv: "xlsx-to-csv",
 }
 
 export const ECommerceListed = AppRoutes
