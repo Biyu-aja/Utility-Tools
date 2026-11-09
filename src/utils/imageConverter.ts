@@ -21,6 +21,15 @@ export { createFakePngDemo, createSolidWhiteDemo, samplePixelColor }
 export type { BgRemovalMode, ColorRGB, RemoveBgOptions }
 
 export type TargetFormat = 'png' | 'jpg' | 'webp'
+export type ImageFitMode = 'cover' | 'fill' | 'contain'
+
+export interface ImageCropBackup {
+  file: File | Blob
+  previewUrl: string
+  originalWidth: number
+  originalHeight: number
+  originalSize: number
+}
 
 export interface ImageConvertItem {
   id: string
@@ -35,6 +44,11 @@ export interface ImageConvertItem {
   
   customWidth?: number
   customHeight?: number
+  fitMode?: ImageFitMode
+
+  // Cropped state
+  isCropped?: boolean
+  originalBackup?: ImageCropBackup
 
   // Converted state
   convertedBlob?: Blob
@@ -56,8 +70,10 @@ export interface ConvertOptions {
   customWidth?: number // in px (e.g. 1920)
   customHeight?: number // in px (e.g. 1080)
   maintainAspectRatio: boolean // true = lock aspect ratio
+  fitMode: ImageFitMode // 'cover' | 'fill' | 'contain'
   maxDimension?: number // 0 for no limit, or 3840, 1920, 1280, 800
   backgroundColor: string // '#ffffff', '#000000', 'transparent'
+  filenamePrefix?: string // e.g., 'web-', ''
   filenameSuffix: string // e.g., '-converted', ''
   includeDimensionsInFilename?: boolean // e.g., true -> '_1920x1080'
 
@@ -79,8 +95,10 @@ export const DEFAULT_CONVERT_OPTIONS: ConvertOptions = {
   customWidth: undefined,
   customHeight: undefined,
   maintainAspectRatio: true,
+  fitMode: 'cover',
   maxDimension: 0,
   backgroundColor: '#ffffff',
+  filenamePrefix: '',
   filenameSuffix: '',
   includeDimensionsInFilename: false,
   
@@ -437,19 +455,50 @@ export function convertSingleImage(
           return
         }
 
-        // Handle background color for transparent images if Remove BG is disabled
-        if (!options.enableRemoveBg && (options.targetFormat === 'jpg' || options.backgroundColor !== 'transparent')) {
+        // Determine Fit Mode: cover, fill, or contain
+        const fitMode: ImageFitMode = item.fitMode || options.fitMode || 'cover'
+
+        // Determine base dimensions before rotation
+        const effectiveSrcW = isRotated90or270 ? srcHeight : srcWidth
+        const effectiveSrcH = isRotated90or270 ? srcWidth : srcHeight
+
+        let renderedW = targetW
+        let renderedH = targetH
+
+        if (fitMode === 'cover') {
+          const scale = Math.max(targetW / effectiveSrcW, targetH / effectiveSrcH)
+          renderedW = Math.round(effectiveSrcW * scale)
+          renderedH = Math.round(effectiveSrcH * scale)
+        } else if (fitMode === 'contain') {
+          const scale = Math.min(targetW / effectiveSrcW, targetH / effectiveSrcH)
+          renderedW = Math.round(effectiveSrcW * scale)
+          renderedH = Math.round(effectiveSrcH * scale)
+        } else {
+          // 'fill' (stretch to exact dimensions)
+          renderedW = targetW
+          renderedH = targetH
+        }
+
+        // Handle background color for transparent images or letterbox in contain mode
+        const needsBg =
+          !options.enableRemoveBg &&
+          (options.targetFormat === 'jpg' ||
+            options.backgroundColor !== 'transparent' ||
+            (fitMode === 'contain' && (renderedW < targetW || renderedH < targetH)))
+
+        if (needsBg) {
           ctx.fillStyle = options.backgroundColor || '#ffffff'
           ctx.fillRect(0, 0, targetW, targetH)
         }
+
+        // Draw width & height in canvas context's pre-rotation coordinate system
+        const drawW = isRotated90or270 ? renderedH : renderedW
+        const drawH = isRotated90or270 ? renderedW : renderedH
 
         // Transform for rotation
         ctx.save()
         ctx.translate(targetW / 2, targetH / 2)
         ctx.rotate((item.rotation * Math.PI) / 180)
-
-        const drawW = isRotated90or270 ? targetH : targetW
-        const drawH = isRotated90or270 ? targetW : targetH
 
         ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH)
         ctx.restore()
@@ -506,15 +555,18 @@ export function generateOutputFilename(
   targetFormat: TargetFormat,
   suffix = '',
   dimensions?: { width: number; height: number },
-  includeDimensions = false
+  includeDimensions = false,
+  prefix = ''
 ): string {
-  const baseName = originalName.replace(/\.[^/.]+$/, '')
+  // Strip known image extensions if present so the target format extension is appended cleanly
+  const baseName =
+    originalName.replace(/\.(png|jpe?g|webp|gif|bmp|svg|avif|ico|tiff?|heic|jfif)$/i, '').trim() || 'image'
   const ext = getFileExtension(targetFormat)
   const dimPart =
     includeDimensions && dimensions && dimensions.width > 0 && dimensions.height > 0
       ? `_${dimensions.width}x${dimensions.height}`
       : ''
-  return `${baseName}${suffix}${dimPart}${ext}`
+  return `${prefix}${baseName}${suffix}${dimPart}${ext}`
 }
 
 /**
@@ -556,18 +608,21 @@ export async function createZipFromConvertedImages(
       options.targetFormat,
       options.filenameSuffix,
       dimensions,
-      options.includeDimensionsInFilename
+      options.includeDimensionsInFilename,
+      options.filenamePrefix
     )
     if (nameCounts.has(filename)) {
       const count = nameCounts.get(filename)! + 1
       nameCounts.set(filename, count)
-      const baseName = item.name.replace(/\.[^/.]+$/, '')
+      const baseName =
+        item.name.replace(/\.(png|jpe?g|webp|gif|bmp|svg|avif|ico|tiff?|heic|jfif)$/i, '').trim() || 'image'
       const ext = getFileExtension(options.targetFormat)
       const dimPart =
         options.includeDimensionsInFilename && dimensions.width > 0 && dimensions.height > 0
           ? `_${dimensions.width}x${dimensions.height}`
           : ''
-      filename = `${baseName}${options.filenameSuffix}${dimPart}_(${count})${ext}`
+      const prefix = options.filenamePrefix || ''
+      filename = `${prefix}${baseName}${options.filenameSuffix}${dimPart}_(${count})${ext}`
     } else {
       nameCounts.set(filename, 1)
     }
@@ -722,4 +777,68 @@ export async function createSampleImages(): Promise<ImageConvertItem[]> {
   const item2 = await createImageItem(blob2, 'sample-vector-badge.png')
 
   return [item1, item2]
+}
+
+/**
+ * Crops a portion of an image defined by cropArea {x, y, width, height}
+ */
+export function cropImageBlob(
+  sourceUrl: string,
+  cropArea: { x: number; y: number; width: number; height: number },
+  mimeType = 'image/png'
+): Promise<{ blob: Blob; url: string; width: number; height: number; size: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const cropW = Math.max(1, Math.round(cropArea.width))
+        const cropH = Math.max(1, Math.round(cropArea.height))
+
+        const canvas = document.createElement('canvas')
+        canvas.width = cropW
+        canvas.height = cropH
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('Gagal membuat context canvas untuk memotong gambar.'))
+          return
+        }
+
+        ctx.drawImage(
+          img,
+          Math.max(0, Math.round(cropArea.x)),
+          Math.max(0, Math.round(cropArea.y)),
+          cropW,
+          cropH,
+          0,
+          0,
+          cropW,
+          cropH
+        )
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Gagal mengekspor hasil crop ke blob.'))
+              return
+            }
+            const url = URL.createObjectURL(blob)
+            resolve({
+              blob,
+              url,
+              width: cropW,
+              height: cropH,
+              size: blob.size,
+            })
+          },
+          mimeType,
+          0.95
+        )
+      } catch (err) {
+        reject(err)
+      }
+    }
+    img.onerror = () => reject(new Error('Gagal memuat gambar untuk dipotong.'))
+    img.src = sourceUrl
+  })
 }

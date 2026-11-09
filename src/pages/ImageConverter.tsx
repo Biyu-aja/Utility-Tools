@@ -21,7 +21,6 @@ import {
   RefreshCw,
   FolderArchive,
   ArrowRight,
-  ShieldCheck,
   Plus,
   X,
   AlertCircle,
@@ -37,21 +36,23 @@ import {
   Unlock,
   SlidersHorizontal,
   Maximize2,
+  Pencil,
+  Crop,
 } from 'lucide-react'
 import {
   type ImageConvertItem,
   type ConvertOptions,
   type TargetFormat,
   type BgRemovalMode,
+  type ImageFitMode,
   DEFAULT_CONVERT_OPTIONS,
   createImageItem,
   convertSingleImage,
+  cropImageBlob,
   generateOutputFilename,
   downloadBlob,
   createZipFromConvertedImages,
   copyBlobToClipboard,
-  createSampleImages,
-  createFakePngDemo,
   samplePixelColor,
 } from '../utils/imageConverter'
 import { formatFileSize } from '../utils/format'
@@ -95,6 +96,24 @@ export function ImageConverterPage() {
   const [modalCustomWidth, setModalCustomWidth] = useState<number | ''>('')
   const [modalCustomHeight, setModalCustomHeight] = useState<number | ''>('')
   const [modalLockAspectRatio, setModalLockAspectRatio] = useState<boolean>(true)
+  const [modalFitMode, setModalFitMode] = useState<ImageFitMode>('cover')
+
+  // Modal State for Cut / Crop Image
+  const [cropModalItem, setCropModalItem] = useState<ImageConvertItem | null>(null)
+  const [cropAspect, setCropAspect] = useState<number | null>(null)
+  const [cropArea, setCropArea] = useState<{ x: number; y: number; width: number; height: number }>({
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+  })
+  const [cropImageNatural, setCropImageNatural] = useState<{ width: number; height: number }>({ width: 1, height: 1 })
+  const cropImageRef = useRef<HTMLImageElement>(null)
+  const [isCroppingAction, setIsCroppingAction] = useState(false)
+
+  // Rename State
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [editingItemName, setEditingItemName] = useState<string>('')
 
   // Keep a ref to items for cleanup on unmount
   const itemsRef = useRef(items)
@@ -222,28 +241,40 @@ export function ImageConverterPage() {
     }
   }
 
-  // Sample Loaders
-  const handleLoadSamples = async () => {
-    try {
-      const sampleItems = await createSampleImages()
-      setItems((prev) => [...prev, ...sampleItems])
-      showToast('Contoh gambar berhasil dimuat!', 'success')
-    } catch (err) {
-      console.error(err)
-      showToast('Gagal memuat contoh gambar.', 'error')
-    }
+  // Rename Handlers
+  const startRenaming = (item: ImageConvertItem) => {
+    setEditingItemId(item.id)
+    const baseName = item.name.replace(/\.(png|jpe?g|webp|gif|bmp|svg|avif|ico|tiff?|heic|jfif)$/i, '')
+    setEditingItemName(baseName || item.name)
   }
 
-  const handleLoadFakePngSample = async () => {
-    try {
-      const demo = await createFakePngDemo()
-      const item = await createImageItem(demo.file, demo.name)
-      setItems((prev) => [...prev, item])
-      showToast('Contoh Fake PNG (Kotak-Kotak) berhasil dimuat!', 'success')
-    } catch (err) {
-      console.error(err)
-      showToast('Gagal memuat demo Fake PNG.', 'error')
+  const saveRenaming = (id: string) => {
+    const trimmed = editingItemName.trim()
+    if (!trimmed) {
+      showToast('Nama file tidak boleh kosong.', 'error')
+      return
     }
+    const sanitized = trimmed.replace(/[/\\?%*:|"<>]/g, '_')
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, name: sanitized } : item))
+    )
+    if (selectedPreviewItem?.id === id) {
+      setSelectedPreviewItem((curr) => (curr ? { ...curr, name: sanitized } : null))
+    }
+    if (transparentExportModalItem?.id === id) {
+      setTransparentExportModalItem((curr) => (curr ? { ...curr, name: sanitized } : null))
+    }
+    if (resizeModalItem?.id === id) {
+      setResizeModalItem((curr) => (curr ? { ...curr, name: sanitized } : null))
+    }
+    setEditingItemId(null)
+    setEditingItemName('')
+    showToast(`Nama file diubah menjadi "${sanitized}"`, 'success')
+  }
+
+  const cancelRenaming = () => {
+    setEditingItemId(null)
+    setEditingItemName('')
   }
 
   // Convert execution
@@ -308,12 +339,14 @@ export function ImageConverterPage() {
     options.customWidth,
     options.customHeight,
     options.maintainAspectRatio,
+    options.fitMode,
     options.maxDimension,
     options.backgroundColor,
+    options.filenamePrefix,
     options.filenameSuffix,
     options.includeDimensionsInFilename,
     items.length,
-    items.map((i) => `${i.id}-${i.rotation}-${i.customWidth || ''}-${i.customHeight || ''}`).join(','),
+    items.map((i) => `${i.id}-${i.rotation}-${i.customWidth || ''}-${i.customHeight || ''}-${i.fitMode || ''}-${i.previewUrl}`).join(','),
   ])
 
   // Live recalculation for Transparent Export Modal
@@ -496,10 +529,11 @@ export function ImageConverterPage() {
       options.targetFormat,
       options.filenameSuffix,
       { width: finalW, height: finalH },
-      options.includeDimensionsInFilename
+      options.includeDimensionsInFilename,
+      options.filenamePrefix
     )
     downloadBlob(item.convertedBlob, filename)
-    showToast(`Mengunduh ${filename} (${finalW} × ${finalH} px)`, 'success')
+    showToast(`Mengunduh ${filename}`, 'success')
   }
 
   // Download all as ZIP
@@ -550,10 +584,11 @@ export function ImageConverterPage() {
       transparentTargetFormat,
       '-transparent',
       { width: finalW, height: finalH },
-      options.includeDimensionsInFilename
+      options.includeDimensionsInFilename,
+      options.filenamePrefix
     )
     downloadBlob(transparentPreviewResult.blob, filename)
-    showToast(`Mengunduh ${filename} (${finalW} × ${finalH} px - Latar Transparan)`, 'success')
+    showToast(`Mengunduh ${filename} (Latar Transparan)`, 'success')
     setTransparentExportModalItem(null)
   }
 
@@ -579,6 +614,7 @@ export function ImageConverterPage() {
     setModalCustomWidth(item.customWidth || item.convertedWidth || baseW)
     setModalCustomHeight(item.customHeight || item.convertedHeight || baseH)
     setModalLockAspectRatio(true)
+    setModalFitMode(item.fitMode || options.fitMode || 'cover')
   }
 
   // Handle modal width change
@@ -620,25 +656,27 @@ export function ImageConverterPage() {
         resizeMode: 'custom-px',
         customWidth: w,
         customHeight: h,
+        fitMode: modalFitMode,
       }))
       setItems((prev) =>
         prev.map((i) => ({
           ...i,
           customWidth: w,
           customHeight: h,
+          fitMode: modalFitMode,
           isConverting: true,
         }))
       )
-      showToast(`Ukuran ${w} × ${h} px diterapkan ke semua (${items.length}) gambar!`, 'success')
+      showToast(`Ukuran ${w} × ${h} px (${modalFitMode}) diterapkan ke semua (${items.length}) gambar!`, 'success')
     } else {
       setItems((prev) =>
         prev.map((i) =>
           i.id === resizeModalItem.id
-            ? { ...i, customWidth: w, customHeight: h, isConverting: true }
+            ? { ...i, customWidth: w, customHeight: h, fitMode: modalFitMode, isConverting: true }
             : i
         )
       )
-      showToast(`Ukuran ${resizeModalItem.name} diubah menjadi ${w} × ${h} px!`, 'success')
+      showToast(`Ukuran ${resizeModalItem.name} diubah menjadi ${w} × ${h} px (${modalFitMode})!`, 'success')
     }
 
     setResizeModalItem(null)
@@ -650,12 +688,210 @@ export function ImageConverterPage() {
     setItems((prev) =>
       prev.map((i) =>
         i.id === resizeModalItem.id
-          ? { ...i, customWidth: undefined, customHeight: undefined, isConverting: true }
+          ? { ...i, customWidth: undefined, customHeight: undefined, fitMode: undefined, isConverting: true }
           : i
       )
     )
     showToast(`Ukuran ${resizeModalItem.name} dikembalikan ke asli.`, 'info')
     setResizeModalItem(null)
+  }
+
+  // Open Crop / Cut Modal
+  const openCropModal = (item: ImageConvertItem) => {
+    setCropModalItem(item)
+    setCropAspect(null)
+    const w = item.originalWidth
+    const h = item.originalHeight
+    setCropImageNatural({ width: w, height: h })
+    // Initial crop selection: 85% centered
+    const initW = Math.round(w * 0.85)
+    const initH = Math.round(h * 0.85)
+    const initX = Math.round((w - initW) / 2)
+    const initY = Math.round((h - initH) / 2)
+    setCropArea({ x: initX, y: initY, width: initW, height: initH })
+  }
+
+  // Set Crop Aspect Ratio
+  const handleSetCropAspect = (ratio: number | null) => {
+    setCropAspect(ratio)
+    if (!cropModalItem) return
+    const w = cropModalItem.originalWidth
+    const h = cropModalItem.originalHeight
+
+    if (!ratio) return
+
+    let targetCropW = w
+    let targetCropH = Math.round(w / ratio)
+
+    if (targetCropH > h) {
+      targetCropH = h
+      targetCropW = Math.round(h * ratio)
+    }
+
+    targetCropW = Math.round(targetCropW * 0.9)
+    targetCropH = Math.round(targetCropH * 0.9)
+
+    const targetX = Math.round((w - targetCropW) / 2)
+    const targetY = Math.round((h - targetCropH) / 2)
+
+    setCropArea({
+      x: Math.max(0, targetX),
+      y: Math.max(0, targetY),
+      width: Math.max(1, targetCropW),
+      height: Math.max(1, targetCropH),
+    })
+  }
+
+  // Apply Crop
+  const handleApplyCrop = async () => {
+    if (!cropModalItem) return
+    setIsCroppingAction(true)
+    try {
+      const res = await cropImageBlob(cropModalItem.previewUrl, cropArea)
+      setItems((prev) =>
+        prev.map((i) => {
+          if (i.id === cropModalItem.id) {
+            const originalBackup = i.originalBackup || {
+              file: i.file,
+              previewUrl: i.previewUrl,
+              originalWidth: i.originalWidth,
+              originalHeight: i.originalHeight,
+              originalSize: i.originalSize,
+            }
+            return {
+              ...i,
+              file: res.blob,
+              previewUrl: res.url,
+              originalWidth: res.width,
+              originalHeight: res.height,
+              originalSize: res.size,
+              isCropped: true,
+              originalBackup,
+              isConverting: true,
+            }
+          }
+          return i
+        })
+      )
+      showToast(`Gambar berhasil dipotong (${res.width} × ${res.height} px)!`, 'success')
+      setCropModalItem(null)
+    } catch (err: any) {
+      console.error('Error cropping image:', err)
+      showToast('Gagal memotong gambar.', 'error')
+    } finally {
+      setIsCroppingAction(false)
+    }
+  }
+
+  // Reset Crop to Original
+  const handleResetCrop = (id: string) => {
+    setItems((prev) =>
+      prev.map((i) => {
+        if (i.id === id && i.originalBackup) {
+          return {
+            ...i,
+            file: i.originalBackup.file,
+            previewUrl: i.originalBackup.previewUrl,
+            originalWidth: i.originalBackup.originalWidth,
+            originalHeight: i.originalBackup.originalHeight,
+            originalSize: i.originalBackup.originalSize,
+            isCropped: false,
+            originalBackup: undefined,
+            isConverting: true,
+          }
+        }
+        return i
+      })
+    )
+    showToast('Potongan gambar dibatalkan, kembali ke ukuran asli.', 'info')
+  }
+
+  // Pointer Drag Handler for Crop Box and Handles
+  const handleStartDrag = (
+    e: React.PointerEvent,
+    action: 'move' | 'nw' | 'ne' | 'se' | 'sw' | 'n' | 's' | 'e' | 'w'
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const startX = e.clientX
+    const startY = e.clientY
+    const startCrop = { ...cropArea }
+    const imgEl = cropImageRef.current
+    if (!imgEl) return
+
+    const renderedW = imgEl.clientWidth || cropImageNatural.width
+    const renderedH = imgEl.clientHeight || cropImageNatural.height
+    const scaleX = renderedW / cropImageNatural.width
+    const scaleY = renderedH / cropImageNatural.height
+
+    const onPointerMove = (moveEv: PointerEvent) => {
+      const dx = (moveEv.clientX - startX) / scaleX
+      const dy = (moveEv.clientY - startY) / scaleY
+
+      let nextX = startCrop.x
+      let nextY = startCrop.y
+      let nextW = startCrop.width
+      let nextH = startCrop.height
+
+      const maxW = cropImageNatural.width
+      const maxH = cropImageNatural.height
+
+      if (action === 'move') {
+        nextX = Math.max(0, Math.min(startCrop.x + dx, maxW - startCrop.width))
+        nextY = Math.max(0, Math.min(startCrop.y + dy, maxH - startCrop.height))
+      } else {
+        if (action.includes('e')) {
+          nextW = Math.max(20, Math.min(startCrop.width + dx, maxW - startCrop.x))
+        }
+        if (action.includes('s')) {
+          nextH = Math.max(20, Math.min(startCrop.height + dy, maxH - startCrop.y))
+        }
+        if (action.includes('w')) {
+          const proposedW = Math.max(20, startCrop.width - dx)
+          const actualDx = startCrop.width - proposedW
+          nextX = Math.max(0, startCrop.x + actualDx)
+          nextW = startCrop.width + (startCrop.x - nextX)
+        }
+        if (action.includes('n')) {
+          const proposedH = Math.max(20, startCrop.height - dy)
+          const actualDy = startCrop.height - proposedH
+          nextY = Math.max(0, startCrop.y + actualDy)
+          nextH = startCrop.height + (startCrop.y - nextY)
+        }
+
+        if (cropAspect) {
+          if (action.includes('e') || action.includes('w')) {
+            nextH = Math.round(nextW / cropAspect)
+            if (nextY + nextH > maxH) {
+              nextH = maxH - nextY
+              nextW = Math.round(nextH * cropAspect)
+            }
+          } else {
+            nextW = Math.round(nextH * cropAspect)
+            if (nextX + nextW > maxW) {
+              nextW = maxW - nextX
+              nextH = Math.round(nextW / cropAspect)
+            }
+          }
+        }
+      }
+
+      setCropArea({
+        x: Math.round(Math.max(0, nextX)),
+        y: Math.round(Math.max(0, nextY)),
+        width: Math.round(Math.max(20, nextW)),
+        height: Math.round(Math.max(20, nextH)),
+      })
+    }
+
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
   }
 
   // Global toolbar width change
@@ -756,32 +992,17 @@ export function ImageConverterPage() {
       )}
 
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-linear-to-r from-primary/15 via-primary/5 to-transparent border border-border-main p-6 sm:p-8">
-        <div className="max-w-3xl space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Image Converter Studio</span>
-            </div>
-            <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
-              <Zap className="w-3.5 h-3.5" />
-              <span>Copy-Paste (Ctrl+V) Ready</span>
-            </div>
-            <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-semibold">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>100% Client-Side / Privasi Aman</span>
-            </div>
+      <div className="relative overflow-hidden rounded-3xl bg-linear-to-r from-primary/15 via-primary/5 to-transparent border border-border-main p-6 sm:p-7">
+        <div className="max-w-2xl space-y-2">
+          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Image Converter Studio</span>
           </div>
-
-          <h1 className="text-2xl sm:text-4xl font-extrabold text-text-main tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">
             Konversi & Kompres Gambar
           </h1>
-          <p className="text-sm sm:text-base text-text-muted leading-relaxed">
-            Ubah format gambar ke <strong className="text-text-main font-semibold">PNG</strong>,{' '}
-            <strong className="text-text-main font-semibold">JPG</strong>, atau{' '}
-            <strong className="text-text-main font-semibold">WebP</strong> secara instan dengan
-            menempel langsung (<kbd className="px-1.5 py-0.5 rounded-md bg-bg-card border border-border-main text-[11px] font-mono">Ctrl + V</kbd>)
-            atau memilih file. Sesuaikan tingkat kejelasan/kualitas dan lihat perkiraan ukuran akhirnya secara real-time!
+          <p className="text-xs sm:text-sm text-text-muted leading-relaxed">
+            Konversi gambar ke WebP, PNG, atau JPG secara instan 100% client-side. Sesuaikan kualitas, resolusi, dan rename file sebelum diunduh.
           </p>
         </div>
       </div>
@@ -792,7 +1013,7 @@ export function ImageConverterPage() {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`relative border-2 border-dashed rounded-3xl p-8 sm:p-12 transition-all duration-200 text-center flex flex-col items-center justify-center space-y-4 ${
+        className={`relative border-2 border-dashed rounded-3xl p-8 sm:p-10 transition-all duration-200 text-center flex flex-col items-center justify-center space-y-4 ${
           isDragging
             ? 'border-primary bg-primary/10 scale-[1.008]'
             : 'border-border-main hover:border-primary/50 bg-bg-card/60'
@@ -813,25 +1034,25 @@ export function ImageConverterPage() {
         />
 
         <div className="relative">
-          <div className="w-16 h-16 rounded-3xl bg-primary/10 text-primary flex items-center justify-center shadow-inner">
-            <UploadCloud className="w-8 h-8" />
+          <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shadow-inner">
+            <UploadCloud className="w-7 h-7" />
           </div>
-          <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
-            <Plus className="w-3.5 h-3.5" />
+          <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+            <Plus className="w-3 h-3" />
           </div>
         </div>
 
-        <div className="max-w-md space-y-1.5">
+        <div className="max-w-md space-y-1">
           <h3 className="text-base sm:text-lg font-bold text-text-main">
             Tarik & Lepas Gambar di Sini, atau Tempel (Ctrl+V)
           </h3>
-          <p className="text-xs sm:text-sm text-text-muted leading-relaxed">
-            Mendukung file tunggal atau banyak sekaligus: PNG, JPG/JPEG, WebP, GIF, BMP, SVG, AVIF.
+          <p className="text-xs text-text-muted leading-relaxed">
+            Mendukung PNG, JPG, WebP, GIF, BMP, SVG, AVIF.
           </p>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+        <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
           <label
             htmlFor={fileInputId}
             className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-2xl bg-primary text-white text-sm font-bold hover:bg-primary-hover transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
@@ -847,24 +1068,6 @@ export function ImageConverterPage() {
           >
             <Copy className="w-4 h-4 text-primary" />
             <span>Tempel Clipboard (Ctrl+V)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleLoadSamples}
-            className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 rounded-2xl bg-bg-card hover:bg-bg-hover border border-border-main text-text-muted hover:text-text-main text-xs font-semibold transition-all"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Muat Contoh Demo</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleLoadFakePngSample}
-            className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 rounded-2xl bg-bg-card hover:bg-bg-hover border border-border-main text-text-muted hover:text-text-main text-xs font-semibold transition-all"
-          >
-            <Grid className="w-3.5 h-3.5 text-blue-500" />
-            <span>Contoh Fake PNG</span>
           </button>
         </div>
       </div>
@@ -1208,6 +1411,54 @@ export function ImageConverterPage() {
                         </button>
                       )}
                     </div>
+
+                    {/* Fit Mode Switcher (object-cover vs object-fill vs object-contain) */}
+                    <div className="pt-1.5 border-t border-border-main/50 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold uppercase text-text-muted">
+                        <span>Penyesuaian (Fit Mode):</span>
+                        <span className="text-primary normal-case font-semibold">
+                          {options.fitMode === 'cover' ? 'object-cover' : options.fitMode === 'fill' ? 'object-fill' : 'object-contain'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setOptions((o) => ({ ...o, fitMode: 'cover' }))}
+                          title="object-cover: Proporsional penuhi canvas (potong bagian lebih tanpa melar)"
+                          className={`py-1 px-1 rounded-lg text-[10px] font-semibold border transition-all text-center ${
+                            options.fitMode === 'cover'
+                              ? 'bg-primary text-white border-primary shadow-xs'
+                              : 'bg-bg-card border-border-main text-text-muted hover:text-text-main'
+                          }`}
+                        >
+                          Cover (Potong)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOptions((o) => ({ ...o, fitMode: 'fill' }))}
+                          title="object-fill: Regangkan sesuai ukuran persis (bisa distorsi/melar)"
+                          className={`py-1 px-1 rounded-lg text-[10px] font-semibold border transition-all text-center ${
+                            options.fitMode === 'fill'
+                              ? 'bg-primary text-white border-primary shadow-xs'
+                              : 'bg-bg-card border-border-main text-text-muted hover:text-text-main'
+                          }`}
+                        >
+                          Fill (Melar)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOptions((o) => ({ ...o, fitMode: 'contain' }))}
+                          title="object-contain: Muat seluruh gambar utuh di dalam canvas dengan latar"
+                          className={`py-1 px-1 rounded-lg text-[10px] font-semibold border transition-all text-center ${
+                            options.fitMode === 'contain'
+                              ? 'bg-primary text-white border-primary shadow-xs'
+                              : 'bg-bg-card border-border-main text-text-muted hover:text-text-main'
+                          }`}
+                        >
+                          Contain (Latar)
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1249,14 +1500,23 @@ export function ImageConverterPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-text-main">Akhiran Nama File (Suffix)</label>
-                  <input
-                    type="text"
-                    value={options.filenameSuffix}
-                    onChange={(e) => setOptions((o) => ({ ...o, filenameSuffix: e.target.value }))}
-                    placeholder="Contoh: -converted"
-                    className="w-full bg-bg-card border border-border-main rounded-xl px-3 py-2 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:border-primary"
-                  />
+                  <label className="text-xs font-bold text-text-main">Awalan & Akhiran File</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={options.filenamePrefix || ''}
+                      onChange={(e) => setOptions((o) => ({ ...o, filenamePrefix: e.target.value }))}
+                      placeholder="Awalan (Prefix)"
+                      className="w-full bg-bg-card border border-border-main rounded-xl px-2.5 py-2 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:border-primary"
+                    />
+                    <input
+                      type="text"
+                      value={options.filenameSuffix}
+                      onChange={(e) => setOptions((o) => ({ ...o, filenameSuffix: e.target.value }))}
+                      placeholder="Akhiran (Suffix)"
+                      className="w-full bg-bg-card border border-border-main rounded-xl px-2.5 py-2 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:border-primary"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -1292,13 +1552,21 @@ export function ImageConverterPage() {
               {items.length === 1 && (
                 <>
                   <div className="h-10 w-px bg-border-main hidden sm:block" />
-                  <div className="space-y-1">
-                    <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">
-                      Dimensi Output
+                  <div className="space-y-1 min-w-[170px] max-w-[220px]">
+                    <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider flex items-center space-x-1">
+                      <span>Nama File</span>
+                      <Pencil className="w-3 h-3 text-primary" />
                     </span>
-                    <p className="text-xl sm:text-2xl font-black text-primary font-mono">
-                      {items[0].convertedWidth || items[0].originalWidth} × {items[0].convertedHeight || items[0].originalHeight} px
-                    </p>
+                    <input
+                      type="text"
+                      value={items[0].name.replace(/\.(png|jpe?g|webp|gif|bmp|svg|avif|ico|tiff?|heic|jfif)$/i, '')}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[/\\?%*:|"<>]/g, '_')
+                        setItems((prev) => prev.map((it, idx) => (idx === 0 ? { ...it, name: val } : it)))
+                      }}
+                      placeholder="Nama file unduhan..."
+                      className="w-full px-2.5 py-1 bg-bg-hover border border-border-main focus:border-primary rounded-xl text-xs font-semibold text-text-main focus:outline-none"
+                    />
                   </div>
                 </>
               )}
@@ -1381,8 +1649,8 @@ export function ImageConverterPage() {
                   type="button"
                   onClick={() => handleCopyImage(items[0])}
                   disabled={!items[0].convertedBlob}
-                  title="Salin hasil gambar langsung ke clipboard tanpa download (Ctrl+V di aplikasi lain)"
-                  className={`inline-flex items-center space-x-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-xs disabled:opacity-50 hover:-translate-y-0.5 active:translate-y-0 ${
+                  title="Salin hasil gambar ke clipboard (Ctrl+V di aplikasi lain)"
+                  className={`inline-flex items-center space-x-1.5 px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-xs disabled:opacity-50 hover:-translate-y-0.5 active:translate-y-0 ${
                     copiedId === items[0].id
                       ? 'bg-emerald-500 text-white shadow-md ring-2 ring-emerald-500/30'
                       : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40'
@@ -1396,10 +1664,7 @@ export function ImageConverterPage() {
                   ) : (
                     <>
                       <Copy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                      <span>Salin Hasil</span>
-                      <span className="text-[11px] font-mono opacity-85 hidden sm:inline">
-                        ({items[0].convertedWidth || items[0].originalWidth} × {items[0].convertedHeight || items[0].originalHeight} px)
-                      </span>
+                      <span>Salin</span>
                     </>
                   )}
                 </button>
@@ -1411,14 +1676,11 @@ export function ImageConverterPage() {
                   type="button"
                   onClick={() => handleDownloadSingle(items[0])}
                   disabled={!items[0].convertedBlob}
-                  title={`Unduh ${items[0].name} (${items[0].convertedWidth || items[0].originalWidth} × ${items[0].convertedHeight || items[0].originalHeight} px)`}
+                  title="Unduh hasil gambar"
                   className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-2xl bg-primary text-white text-xs sm:text-sm font-bold hover:bg-primary-hover transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 active:translate-y-0"
                 >
                   <Download className="w-4 h-4" />
                   <span>Unduh {options.targetFormat.toUpperCase()}</span>
-                  <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-md bg-black/25 text-white">
-                    {items[0].convertedWidth || items[0].originalWidth} × {items[0].convertedHeight || items[0].originalHeight} px
-                  </span>
                 </button>
               ) : (
                 <button
@@ -1452,6 +1714,14 @@ export function ImageConverterPage() {
               const isSaved = diffPercent < 0
               const finalW = item.convertedWidth || item.originalWidth
               const finalH = item.convertedHeight || item.originalHeight
+              const outputFilename = generateOutputFilename(
+                item.name,
+                options.targetFormat,
+                options.filenameSuffix,
+                { width: finalW, height: finalH },
+                options.includeDimensionsInFilename,
+                options.filenamePrefix
+              )
 
               return (
                 <div
@@ -1486,6 +1756,14 @@ export function ImageConverterPage() {
                         >
                           <RotateCw className="w-4 h-4" />
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => openCropModal(item)}
+                          title="Potong Gambar (Cut & Crop)"
+                          className="w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center transition-transform hover:scale-110"
+                        >
+                          <Crop className="w-4 h-4" />
+                        </button>
                       </div>
 
                       {/* Image Number Badge */}
@@ -1496,21 +1774,75 @@ export function ImageConverterPage() {
 
                     {/* Metadata & Size Transformation */}
                     <div className="flex-1 min-w-0 space-y-2">
+                      {/* Rename and Delete Header */}
                       <div className="flex items-start justify-between gap-2">
-                        <h4
-                          className="text-sm font-bold text-text-main truncate"
-                          title={item.name}
-                        >
-                          {item.name}
-                        </h4>
+                        {editingItemId === item.id ? (
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                            <input
+                              type="text"
+                              autoFocus
+                              value={editingItemName}
+                              onChange={(e) => setEditingItemName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveRenaming(item.id)
+                                if (e.key === 'Escape') cancelRenaming()
+                              }}
+                              placeholder="Nama file..."
+                              className="flex-1 min-w-0 px-2.5 py-1 text-xs font-semibold bg-bg-card border-2 border-primary rounded-xl text-text-main focus:outline-none shadow-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => saveRenaming(item.id)}
+                              className="p-1.5 bg-primary text-white rounded-xl hover:bg-primary-hover transition-colors shrink-0 shadow-xs"
+                              title="Simpan nama file (Enter)"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelRenaming}
+                              className="p-1.5 bg-bg-hover hover:bg-border-main text-text-muted hover:text-text-main rounded-xl transition-colors shrink-0"
+                              title="Batal (Esc)"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-1.5 flex-1 min-w-0 group/rename">
+                            <h4
+                              onClick={() => startRenaming(item)}
+                              className="text-sm font-bold text-text-main truncate cursor-pointer hover:text-primary transition-colors"
+                              title={`Klik untuk ganti nama: ${item.name}`}
+                            >
+                              {item.name}
+                            </h4>
+                            <button
+                              type="button"
+                              onClick={() => startRenaming(item)}
+                              className="p-1 text-text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors opacity-70 group-hover/rename:opacity-100 shrink-0"
+                              title="Ubah nama file"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => handleRemove(item.id)}
                           title="Hapus gambar ini"
-                          className="text-text-muted hover:text-rose-500 p-1 rounded-lg hover:bg-rose-500/10 transition-colors"
+                          className="text-text-muted hover:text-rose-500 p-1 rounded-lg hover:bg-rose-500/10 transition-colors shrink-0"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+                      </div>
+
+                      {/* Download Filename Preview */}
+                      <div className="flex items-center space-x-1.5 text-xs text-text-muted">
+                        <span className="text-[11px]">Download:</span>
+                        <span className="font-mono font-bold text-primary truncate text-[11px]" title={outputFilename}>
+                          {outputFilename}
+                        </span>
                       </div>
 
                       {/* Dimensions: Asli & Output px */}
@@ -1528,18 +1860,23 @@ export function ImageConverterPage() {
                           <span>Output: {finalW} × {finalH} px</span>
                           <SlidersHorizontal className="w-3 h-3 opacity-70 group-hover:opacity-100 transition-opacity" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => openResizeModalForItem(item)}
-                          title="Ubah resolusi lebar & tinggi (px)"
-                          className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-bg-hover hover:bg-bg-hover/80 border border-border-main text-text-muted hover:text-text-main text-[10px] font-semibold transition-all"
-                        >
-                          <span>Ubah px</span>
-                        </button>
+                        {item.isCropped && (
+                          <div className="inline-flex items-center space-x-1 font-mono text-[10px] px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30">
+                            <span>Dipotong</span>
+                            <button
+                              type="button"
+                              onClick={() => handleResetCrop(item.id)}
+                              title="Batalkan potongan gambar"
+                              className="ml-0.5 text-text-muted hover:text-rose-500 hover:underline"
+                            >
+                              (Reset)
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Size Comparison Badge */}
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
                         <div className="flex items-center space-x-1.5 text-xs">
                           <span className="text-text-muted font-medium line-through decoration-text-muted/60">
                             {formatFileSize(item.originalSize)}
@@ -1565,7 +1902,7 @@ export function ImageConverterPage() {
                     </div>
                   </div>
 
-                  {/* Card Bottom Actions: Quick Actions + Transparent Export Option */}
+                  {/* Card Bottom Actions */}
                   <div className="pt-3 border-t border-border-main flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center space-x-1.5 text-xs text-text-muted">
                       <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
@@ -1581,26 +1918,37 @@ export function ImageConverterPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      {/* Button to Open Transparent / Remove BG Settings for this image */}
+                      {/* Button to Open Cut / Crop Modal */}
+                      <button
+                        type="button"
+                        onClick={() => openCropModal(item)}
+                        title="Potong bagian gambar ini (Cut / Crop)"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-semibold transition-all"
+                      >
+                        <Crop className="w-3.5 h-3.5" />
+                        <span className="text-[11px]">Potong</span>
+                      </button>
+
+                      {/* Button to Open Transparent / Remove BG Settings */}
                       <button
                         type="button"
                         onClick={() => {
                           setTransparentExportModalItem(item)
                           setTransparentTargetFormat(options.targetFormat === 'jpg' ? 'png' : options.targetFormat)
                         }}
-                        title="Atur transparansi latar belakang (Warna Kustom, Fake PNG, Putih) sebelum diunduh atau disalin"
+                        title="Atur transparansi latar belakang (Warna Kustom, Fake PNG, Putih)"
                         className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-semibold transition-all"
                       >
                         <Eraser className="w-3.5 h-3.5" />
                         <span className="text-[11px]">Opsi Transparan</span>
                       </button>
 
-                      {/* Salin Hasil (Copy to Clipboard) - Enhanced & Prominent */}
+                      {/* Salin Hasil (Copy to Clipboard) */}
                       <button
                         type="button"
                         onClick={() => handleCopyImage(item)}
                         disabled={!item.convertedBlob}
-                        title={`Salin hasil (${finalW} × ${finalH} px) ke clipboard. Langsung tempel (Ctrl+V) di aplikasi lain tanpa perlu download.`}
+                        title="Salin gambar ke clipboard (Ctrl+V di aplikasi lain)"
                         className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 hover:-translate-y-0.5 active:translate-y-0 ${
                           copiedId === item.id
                             ? 'bg-emerald-500 text-white shadow-md ring-2 ring-emerald-500/30'
@@ -1610,29 +1958,26 @@ export function ImageConverterPage() {
                         {copiedId === item.id ? (
                           <>
                             <Check className="w-3.5 h-3.5 text-white" />
-                            <span className="text-[11px]">Tersalin ({finalW} × ${finalH} px)!</span>
+                            <span className="text-[11px]">Tersalin!</span>
                           </>
                         ) : (
                           <>
                             <Copy className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                            <span className="text-[11px]">Salin Hasil</span>
+                            <span className="text-[11px]">Salin</span>
                           </>
                         )}
                       </button>
 
-                      {/* Standard Download Button with Dimensions */}
+                      {/* Standard Download Button */}
                       <button
                         type="button"
                         onClick={() => handleDownloadSingle(item)}
                         disabled={!item.convertedBlob}
-                        title={`Unduh file ${options.targetFormat.toUpperCase()} dengan ukuran ${finalW} × ${finalH} px`}
+                        title={`Unduh ${outputFilename}`}
                         className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-all shadow-xs hover:shadow-sm disabled:opacity-50 hover:-translate-y-0.5 active:translate-y-0"
                       >
                         <Download className="w-3.5 h-3.5" />
                         <span>Unduh {options.targetFormat.toUpperCase()}</span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-black/25 text-white font-medium">
-                          {finalW} × {finalH} px
-                        </span>
                       </button>
                     </div>
                   </div>
@@ -1787,6 +2132,54 @@ export function ImageConverterPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Fit Mode Selection (Cover vs Fill vs Contain) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-text-main">Mode Penyesuaian (Fit Mode):</label>
+                  <span className="text-[11px] text-primary font-semibold">
+                    {modalFitMode === 'cover' ? 'object-cover (Potong Proporsional)' : modalFitMode === 'fill' ? 'object-fill (Regangkan Sesuai Ukuran)' : 'object-contain (Muat di Dalam Latar)'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalFitMode('cover')}
+                    className={`p-2.5 rounded-2xl border text-left transition-all text-xs ${
+                      modalFitMode === 'cover'
+                        ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs'
+                        : 'bg-bg-hover/60 border-border-main text-text-muted hover:text-text-main'
+                    }`}
+                  >
+                    <span className="font-bold block">Cover</span>
+                    <span className="text-[10px] opacity-75">Potong proporsional</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalFitMode('fill')}
+                    className={`p-2.5 rounded-2xl border text-left transition-all text-xs ${
+                      modalFitMode === 'fill'
+                        ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs'
+                        : 'bg-bg-hover/60 border-border-main text-text-muted hover:text-text-main'
+                    }`}
+                  >
+                    <span className="font-bold block">Fill</span>
+                    <span className="text-[10px] opacity-75">Regangkan / Melar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalFitMode('contain')}
+                    className={`p-2.5 rounded-2xl border text-left transition-all text-xs ${
+                      modalFitMode === 'contain'
+                        ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs'
+                        : 'bg-bg-hover/60 border-border-main text-text-muted hover:text-text-main'
+                    }`}
+                  >
+                    <span className="font-bold block">Contain</span>
+                    <span className="text-[10px] opacity-75">Muat dengan latar</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Modal Actions */}
@@ -1816,6 +2209,283 @@ export function ImageConverterPage() {
                   className="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-colors shadow-sm"
                 >
                   Terapkan Ukuran
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Cut / Crop Image */}
+      {cropModalItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-4xl bg-bg-card border border-border-main rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border-main bg-bg-card/90">
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                  <Crop className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-text-main">
+                    Potong Gambar (Cut & Crop)
+                  </h3>
+                  <p className="text-xs text-text-muted truncate max-w-sm">
+                    {cropModalItem.name} • Ukuran Asli: {cropModalItem.originalWidth} × {cropModalItem.originalHeight} px
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCropModalItem(null)}
+                className="p-2 rounded-xl bg-bg-hover hover:bg-bg-hover/80 text-text-muted hover:text-text-main transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Interactive Visual Crop Workspace */}
+            <div className="relative flex-1 bg-slate-950/75 border-b border-border-main p-4 sm:p-6 flex items-center justify-center overflow-hidden min-h-[280px] max-h-[52vh] select-none">
+              <div className="relative inline-block max-h-full max-w-full overflow-hidden rounded-xl shadow-2xl">
+                <img
+                  ref={cropImageRef}
+                  src={cropModalItem.previewUrl}
+                  alt="Crop Target"
+                  onLoad={(e) => {
+                    const el = e.currentTarget
+                    setCropImageNatural({ width: el.naturalWidth, height: el.naturalHeight })
+                  }}
+                  className="max-h-[46vh] max-w-full object-contain pointer-events-none block select-none"
+                />
+
+                {/* Crop Box with Dark Backdrop Mask */}
+                <div
+                  className="absolute border-2 border-white cursor-move select-none"
+                  style={{
+                    left: `${(cropArea.x / (cropImageNatural.width || 1)) * 100}%`,
+                    top: `${(cropArea.y / (cropImageNatural.height || 1)) * 100}%`,
+                    width: `${(cropArea.width / (cropImageNatural.width || 1)) * 100}%`,
+                    height: `${(cropArea.height / (cropImageNatural.height || 1)) * 100}%`,
+                    boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.65)',
+                  }}
+                  onPointerDown={(e) => handleStartDrag(e, 'move')}
+                >
+                  {/* Rule of thirds grid lines */}
+                  <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3">
+                    <div className="border-r border-b border-white/30" />
+                    <div className="border-r border-b border-white/30" />
+                    <div className="border-b border-white/30" />
+                    <div className="border-r border-b border-white/30" />
+                    <div className="border-r border-b border-white/30" />
+                    <div className="border-b border-white/30" />
+                    <div className="border-r border-b border-white/30" />
+                    <div className="border-r border-b border-white/30" />
+                    <div />
+                  </div>
+
+                  {/* Corner Handles */}
+                  <div
+                    className="absolute -top-2 -left-2 w-4 h-4 bg-white border border-slate-900 rounded-xs shadow-md cursor-nwse-resize"
+                    onPointerDown={(e) => handleStartDrag(e, 'nw')}
+                  />
+                  <div
+                    className="absolute -top-2 -right-2 w-4 h-4 bg-white border border-slate-900 rounded-xs shadow-md cursor-nesw-resize"
+                    onPointerDown={(e) => handleStartDrag(e, 'ne')}
+                  />
+                  <div
+                    className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border border-slate-900 rounded-xs shadow-md cursor-nwse-resize"
+                    onPointerDown={(e) => handleStartDrag(e, 'se')}
+                  />
+                  <div
+                    className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border border-slate-900 rounded-xs shadow-md cursor-nesw-resize"
+                    onPointerDown={(e) => handleStartDrag(e, 'sw')}
+                  />
+
+                  {/* Edge Handles */}
+                  <div
+                    className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-6 h-2.5 bg-white/90 border border-slate-900 rounded-xs shadow-sm cursor-ns-resize"
+                    onPointerDown={(e) => handleStartDrag(e, 'n')}
+                  />
+                  <div
+                    className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-2.5 bg-white/90 border border-slate-900 rounded-xs shadow-sm cursor-ns-resize"
+                    onPointerDown={(e) => handleStartDrag(e, 's')}
+                  />
+                  <div
+                    className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-2.5 h-6 bg-white/90 border border-slate-900 rounded-xs shadow-sm cursor-ew-resize"
+                    onPointerDown={(e) => handleStartDrag(e, 'w')}
+                  />
+                  <div
+                    className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-2.5 h-6 bg-white/90 border border-slate-900 rounded-xs shadow-sm cursor-ew-resize"
+                    onPointerDown={(e) => handleStartDrag(e, 'e')}
+                  />
+
+                  {/* Dimension Tag */}
+                  <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md bg-black/80 text-white font-mono text-[10px] pointer-events-none shadow-xs">
+                    {Math.round(cropArea.width)} × {Math.round(cropArea.height)} px
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Controls: Aspect Presets & Pixel Inputs */}
+            <div className="p-5 space-y-4 overflow-y-auto">
+              {/* Aspect Ratio Presets */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-text-main">Pilihan Rasio Aspek (Aspect Ratio):</span>
+                  <span className="text-[11px] text-primary font-mono font-bold">
+                    Hasil: {Math.round(cropArea.width)} × {Math.round(cropArea.height)} px
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: 'Bebas (Free)', ratio: null },
+                    { label: '1:1 (Persegi)', ratio: 1 },
+                    { label: '16:9 (Lanskap)', ratio: 16 / 9 },
+                    { label: '9:16 (Story/TikTok)', ratio: 9 / 16 },
+                    { label: '4:3 (Standar)', ratio: 4 / 3 },
+                    { label: '3:2 (DSLR)', ratio: 3 / 2 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => handleSetCropAspect(preset.ratio)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                        cropAspect === preset.ratio
+                          ? 'bg-primary text-white border-primary shadow-xs'
+                          : 'bg-bg-hover/60 border-border-main text-text-muted hover:text-text-main'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Exact Pixel Inputs */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1 border-t border-border-main/50">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-text-muted block">Lebar (px)</label>
+                  <input
+                    type="number"
+                    min="10"
+                    max={cropImageNatural.width}
+                    value={Math.round(cropArea.width)}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 10
+                      const clampedW = Math.min(val, cropImageNatural.width - cropArea.x)
+                      setCropArea((prev) => ({
+                        ...prev,
+                        width: Math.max(10, clampedW),
+                        height: cropAspect ? Math.round(Math.max(10, clampedW) / cropAspect) : prev.height,
+                      }))
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-bg-card border border-border-main rounded-xl text-xs font-mono font-bold text-text-main focus:outline-none focus:border-primary shadow-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-text-muted block">Tinggi (px)</label>
+                  <input
+                    type="number"
+                    min="10"
+                    max={cropImageNatural.height}
+                    value={Math.round(cropArea.height)}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 10
+                      const clampedH = Math.min(val, cropImageNatural.height - cropArea.y)
+                      setCropArea((prev) => ({
+                        ...prev,
+                        height: Math.max(10, clampedH),
+                        width: cropAspect ? Math.round(Math.max(10, clampedH) * cropAspect) : prev.width,
+                      }))
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-bg-card border border-border-main rounded-xl text-xs font-mono font-bold text-text-main focus:outline-none focus:border-primary shadow-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-text-muted block">Posisi X (px)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={cropImageNatural.width - cropArea.width}
+                    value={Math.round(cropArea.x)}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0
+                      setCropArea((prev) => ({
+                        ...prev,
+                        x: Math.max(0, Math.min(val, cropImageNatural.width - prev.width)),
+                      }))
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-bg-card border border-border-main rounded-xl text-xs font-mono font-bold text-text-main focus:outline-none focus:border-primary shadow-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-text-muted block">Posisi Y (px)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={cropImageNatural.height - cropArea.height}
+                    value={Math.round(cropArea.y)}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0
+                      setCropArea((prev) => ({
+                        ...prev,
+                        y: Math.max(0, Math.min(val, cropImageNatural.height - prev.height)),
+                      }))
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-bg-card border border-border-main rounded-xl text-xs font-mono font-bold text-text-main focus:outline-none focus:border-primary shadow-xs"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-6 py-4 border-t border-border-main bg-bg-card flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setCropAspect(null)
+                  setCropArea({
+                    x: 0,
+                    y: 0,
+                    width: cropImageNatural.width,
+                    height: cropImageNatural.height,
+                  })
+                }}
+                className="px-3.5 py-2 rounded-xl bg-bg-hover hover:bg-bg-hover/80 text-text-muted hover:text-text-main text-xs font-semibold transition-colors"
+              >
+                Pilih Ukuran Penuh (Reset)
+              </button>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setCropModalItem(null)}
+                  className="px-4 py-2 rounded-xl bg-bg-hover hover:bg-bg-hover/80 text-text-muted hover:text-text-main text-xs font-semibold transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyCrop}
+                  disabled={isCroppingAction}
+                  className="inline-flex items-center space-x-1.5 px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-colors shadow-sm disabled:opacity-50"
+                >
+                  {isCroppingAction ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Memotong...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Terapkan Potongan</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -2208,9 +2878,56 @@ export function ImageConverterPage() {
                   HD
                 </div>
                 <div>
-                  <h3 className="text-sm sm:text-base font-bold text-text-main truncate max-w-xs sm:max-w-md">
-                    {selectedPreviewItem.name}
-                  </h3>
+                  {editingItemId === selectedPreviewItem.id ? (
+                    <div className="flex items-center gap-1.5 py-0.5">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={editingItemName}
+                        onChange={(e) => setEditingItemName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveRenaming(selectedPreviewItem.id)
+                          if (e.key === 'Escape') cancelRenaming()
+                        }}
+                        placeholder="Nama file..."
+                        className="px-2.5 py-1 text-xs font-semibold bg-bg-card border-2 border-primary rounded-xl text-text-main focus:outline-none shadow-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveRenaming(selectedPreviewItem.id)}
+                        className="p-1.5 bg-primary text-white rounded-xl hover:bg-primary-hover transition-colors shrink-0 shadow-xs"
+                        title="Simpan nama file (Enter)"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelRenaming}
+                        className="p-1.5 bg-bg-hover hover:bg-border-main text-text-muted hover:text-text-main rounded-xl transition-colors shrink-0"
+                        title="Batal (Esc)"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      <h3
+                        onClick={() => startRenaming(selectedPreviewItem)}
+                        className="text-sm sm:text-base font-bold text-text-main truncate max-w-xs sm:max-w-md cursor-pointer hover:text-primary transition-colors"
+                        title={`Klik untuk ganti nama: ${selectedPreviewItem.name}`}
+                      >
+                        {selectedPreviewItem.name}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => startRenaming(selectedPreviewItem)}
+                        className="p-1 text-text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                        title="Ubah nama file"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                   <p className="text-xs text-text-muted">
                     Pratinjau Perbandingan Kualitas & Kejelasan Gambar
                   </p>
@@ -2352,7 +3069,7 @@ export function ImageConverterPage() {
                   ) : (
                     <>
                       <Copy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                      <span>Salin Hasil ({selectedPreviewItem.convertedWidth || selectedPreviewItem.originalWidth} × {selectedPreviewItem.convertedHeight || selectedPreviewItem.originalHeight} px)</span>
+                      <span>Salin</span>
                     </>
                   )}
                 </button>
@@ -2362,54 +3079,13 @@ export function ImageConverterPage() {
                   className="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-colors inline-flex items-center space-x-1.5 shadow-sm hover:-translate-y-0.5 active:translate-y-0"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Unduh {options.targetFormat.toUpperCase()} ({selectedPreviewItem.convertedWidth || selectedPreviewItem.originalWidth} × {selectedPreviewItem.convertedHeight || selectedPreviewItem.originalHeight} px)</span>
+                  <span>Unduh {options.targetFormat.toUpperCase()}</span>
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-
-      {/* Guide & Tips Section */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
-        <div className="bg-bg-card border border-border-main rounded-3xl p-6 space-y-3">
-          <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
-            <FileImage className="w-5 h-5" />
-          </div>
-          <h4 className="text-sm font-bold text-text-main">Memilih Format yang Tepat</h4>
-          <ul className="text-xs text-text-muted space-y-2 leading-relaxed">
-            <li>
-              <strong className="text-text-main font-semibold">WebP:</strong> Format modern paling efisien untuk web, ukuran jauh lebih kecil dengan kualitas tajam.
-            </li>
-            <li>
-              <strong className="text-text-main font-semibold">PNG:</strong> Format tanpa kompresi pecah (*lossless*) & mendukung latar transparan.
-            </li>
-            <li>
-              <strong className="text-text-main font-semibold">JPG:</strong> Kompatibel untuk semua sistem & perangkat cetak.
-            </li>
-          </ul>
-        </div>
-
-        <div className="bg-bg-card border border-border-main rounded-3xl p-6 space-y-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
-            <Zap className="w-5 h-5" />
-          </div>
-          <h4 className="text-sm font-bold text-text-main">Tips Mengatur Kejelasan</h4>
-          <p className="text-xs text-text-muted leading-relaxed">
-            Pengaturan kualitas di kisaran <strong className="text-text-main font-semibold">80% – 85%</strong> menghasilkan gambar yang secara kasat mata sama jernihnya dengan aslinya, namun menghemat ukuran file hingga <strong className="text-emerald-600 dark:text-emerald-400 font-bold">70% – 90%</strong>.
-          </p>
-        </div>
-
-        <div className="bg-bg-card border border-border-main rounded-3xl p-6 space-y-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-            <Copy className="w-5 h-5" />
-          </div>
-          <h4 className="text-sm font-bold text-text-main">Pintasan Copy-Paste</h4>
-          <p className="text-xs text-text-muted leading-relaxed">
-            Ambil tangkapan layar (<kbd className="px-1 py-0.5 rounded bg-bg-hover border border-border-main font-mono text-[10px]">Win + Shift + S</kbd> / <kbd className="px-1 py-0.5 rounded bg-bg-hover border border-border-main font-mono text-[10px]">Cmd + Shift + 4</kbd>) atau salin gambar dari web manapun, lalu langsung tekan <kbd className="px-1.5 py-0.5 rounded bg-bg-hover border border-border-main font-mono text-[10px]">Ctrl + V</kbd> di halaman ini!
-          </p>
-        </div>
-      </div>
     </div>
   )
 }
